@@ -1,41 +1,31 @@
 
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import HomeScreen from "../screens/home";
-import ProfileScreen from "../screens/profile";
 import { NavigationContainer } from "@react-navigation/native";
+import HomeTabNavigator from "../screens/home/tabNavigator";
+import LoginScreen from "../screens/login";
+import RegisterScreen from "../screens/signup";
+import { createStackNavigator } from "@react-navigation/stack";
+const Stack = createStackNavigator();
 
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-const Tab = createBottomTabNavigator();
-
-function MyTabs(){
+export default function Navigation() {
     return (
-        <Tab.Navigator initialRouteName="Home" screenOptions={{
-            tabBarActiveTintColor: '#4943c2ff'
-        }}>
-            <Tab.Screen 
-            name="Home" 
-            
-            component={HomeScreen}
-            options={{
-                headerShown:false,
-                tabBarLabel: 'Inicio', 
-                tabBarIcon:({color, size})=>( <MaterialCommunityIcons name="home" color={color} size={25}/>)}} />
-            <Tab.Screen name="Profile" 
-            component={ProfileScreen} 
-            options={{
-                headerShown:false,
-                tabBarLabel: 'Mi Perfil', 
-                tabBarIcon:({color, size})=>(
-                    <MaterialCommunityIcons name="account-circle" size={24} color={color} />
-                )}}/>
-        </Tab.Navigator>
-    );
-}
-
-export default function Navigation(){
-    return( 
         <NavigationContainer>
-            <MyTabs/>
+            <Stack.Navigator initialRouteName="Login">
+                <Stack.Screen 
+                    name="Login" 
+                    component={LoginScreen} 
+                    options={{ headerShown: false }} 
+                />
+                <Stack.Screen 
+                    name="Register" 
+                    component={RegisterScreen} 
+                    options={{ headerShown: false }} 
+                />
+                <Stack.Screen 
+                    name="Home" 
+                    component={HomeTabNavigator} 
+                    options={{ headerShown: false }} 
+                />
+            </Stack.Navigator>
         </NavigationContainer>
     );
 }

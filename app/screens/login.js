@@ -7,7 +7,7 @@ export default function LoginScreen({ navigation }) {
     const [password, setPassword] = useState('');
 
     const handleLogin = () => {
-        navigation.navigate('Home');
+        navigation.navigate('Profile');
     };
 
     return (
@@ -35,7 +35,7 @@ export default function LoginScreen({ navigation }) {
                 <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin}>
                     <Text style={styles.btnText}>Entrar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.btnSecondary} onPress={() => navigation.navigate('Register')}>
+                <TouchableOpacity style={styles.btnSecondary} onPress={() => navigation.navigate('Signup')}>
                     <Text style={styles.btnSecondaryText}>¿No tienes cuenta? Regístrate</Text>
                 </TouchableOpacity>
             </View>

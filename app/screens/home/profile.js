@@ -2,7 +2,12 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
 import Constants from 'expo-constants';
 import { MaterialIcons } from '@expo/vector-icons';
 
-export default function ProfileScreen() {
+
+export default function ProfileScreen({ navigation }) {
+  const handleLogin = () => {
+        navigation.navigate('Login');
+    };
+
   return (
     <View style={styles.container}>
       <View style={styles.cardProfile}>
@@ -20,7 +25,7 @@ export default function ProfileScreen() {
           <Text style={styles.editText}>Editar perfil</Text>
         </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.logoutButton}>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogin}>
         <MaterialIcons name="logout" size={24} color="white" />
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </TouchableOpacity>

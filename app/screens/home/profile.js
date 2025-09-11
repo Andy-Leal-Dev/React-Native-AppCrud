@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView } from "react-native";
 import Constants from 'expo-constants';
 import { MaterialIcons } from '@expo/vector-icons';
+import { TouchableWithoutFeedback } from "@gorhom/bottom-sheet";
 
 
 export default function ProfileScreen({ navigation }) {
@@ -9,7 +10,8 @@ export default function ProfileScreen({ navigation }) {
     };
 
   return (
-    <View style={styles.container}>
+    
+     <View style={styles.container}>
       <View style={styles.cardProfile}>
         <Text style={styles.textHeader}>Mi Perfil</Text>
         <View style={styles.avatarContainer}>

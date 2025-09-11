@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Platform,StyleSheet,Keyboard, Image, KeyboardAvoidingView, TouchableWithoutFeedback } from 'react-native';
 import logo from '../../assets/logoBg.png';
-
+import { ScrollView } from 'react-native-gesture-handler';
+import Constants from 'expo-constants';
 export default function RegisterScreen({ navigation }) {
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
@@ -14,8 +15,14 @@ export default function RegisterScreen({ navigation }) {
     };
 
     return (
-        <View style={styles.container}>
-            <Image source={logo} style={styles.logo} />
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}
+        >
+             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.container}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Image source={logo} style={styles.logo} />
             <View style={styles.form}>
                 <Text style={styles.title}>Regístrate</Text>
                 <TextInput
@@ -58,16 +65,22 @@ export default function RegisterScreen({ navigation }) {
                     <Text style={styles.btnSecondaryText}>¿Ya tienes cuenta? Inicia sesión</Text>
                 </TouchableOpacity>
             </View>
+          </ScrollView>
+          
         </View>
+         </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+            
     );
 }
 
 const styles = StyleSheet.create({
     container: {
+        paddingTop: Constants.statusBarHeight,
         flex: 1,
         justifyContent: 'center',
         backgroundColor: '#f2f6fc',
-        padding: 16,
+        
     },
     logo: {
         width: 220,
@@ -80,7 +93,7 @@ const styles = StyleSheet.create({
     },
     form: {
         gap: 16,
-        marginHorizontal: 20,
+        marginHorizontal: 9,
         padding: 24,
         width: "95%",
         borderRadius: 24,
@@ -90,7 +103,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.18,
         shadowRadius: 6,
-        marginTop: 40,
+        marginTop: 20,
     },
     title: {
         fontSize: 28,

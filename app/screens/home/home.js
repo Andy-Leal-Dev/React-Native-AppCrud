@@ -1,14 +1,15 @@
 import React, { useRef, useCallback, useState } from "react";
-import { 
-  View, 
-  Text, 
-  ScrollView, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  Pressable, 
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
-  Platform 
+  Platform,
+  Image,
 } from "react-native";
 import Constants from 'expo-constants';
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
@@ -18,12 +19,26 @@ import {
   BottomSheetModal,
   BottomSheetView,
   BottomSheetModalProvider,
-  BottomSheetTextInput
+  BottomSheetTextInput,
+  BottomSheetScrollView // Import BottomSheetScrollView
 } from '@gorhom/bottom-sheet';
+import * as ImagePicker from 'expo-image-picker';
+
+// Función para calcular tiempo relativo
+function timeAgo(date) {
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000);
+  if (diff < 60) return `${diff} seg`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} h`;
+  return `${Math.floor(diff / 86400)} d`;
+}
 
 export default function HomeScreen() {
   const addNoteSheetRef = useRef(null);
   const detailSheetRef = useRef(null);
+  const [images, setImages] = useState([]);
+  const [videos, setVideos] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
 
   // callbacks
@@ -37,6 +52,42 @@ export default function HomeScreen() {
   const handleSheetChanges = useCallback((index) => {
     console.log('handleSheetChanges', index);
   }, []);
+
+  // Selección de imágenes
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const newImages = result.assets.map(asset => ({
+        uri: asset.uri,
+        addedAt: new Date()
+      }));
+      setImages(prev => [...prev, ...newImages]);
+    }
+  };
+
+  // Selección de videos
+  const pickVideo = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsMultipleSelection: true,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const newVideos = result.assets.map(asset => ({
+        uri: asset.uri,
+        addedAt: new Date()
+      }));
+      setVideos(prev => [...prev, ...newVideos]);
+    }
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -76,20 +127,19 @@ export default function HomeScreen() {
           <TouchableOpacity style={styles.floatingButton} onPress={handlePresentAddNoteSheet}>
             <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
-          
-          <BottomSheetModal style={{backgroundColor: "#e3e3e3"}}
+
+          {/* BottomSheetModal para agregar nueva nota */}
+          <BottomSheetModal
             ref={addNoteSheetRef}
             onChange={handleSheetChanges}
             snapPoints={['80%']}
             enablePanDownToClose={true}
-            keyboardBehavior="fillParent"
-            
           >
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
               behavior={Platform.OS === "android" ? "padding" : "height"}
               style={styles.keyboardAvoidingView}
             >
-              <BottomSheetView style={styles.contentContainer} >
+              <BottomSheetScrollView style={styles.contentContainer}> {/* Use BottomSheetScrollView here */}
                 <View style={styles.creatNote}>
                   <Text style={{ fontSize: 20, fontWeight: '600' }}>Agregar Nueva Nota</Text>
                   <View style={styles.creatNoteOptions}>
@@ -99,7 +149,7 @@ export default function HomeScreen() {
                         padding: 6,
                         borderRadius: 30
                       }}
-                      onPress={() => console.log('Guardar Nota')}
+                      onPress={pickImage}
                     >
                       <MaterialIcons name="add-a-photo" size={20} color="white" />
                     </Pressable>
@@ -109,56 +159,72 @@ export default function HomeScreen() {
                         padding: 6,
                         borderRadius: 30
                       }}
-                      onPress={() => console.log('Guardar Nota')}
+                      onPress={pickVideo}
                     >
                       <MaterialIcons name="movie" size={20} color="white" />
-                    </Pressable>
-                    <Pressable
-                      style={{
-                        backgroundColor: '#449DD1',
-                        padding: 6,
-                        borderRadius: 30
-                      }}
-                      onPress={() => console.log('Guardar Nota')}
-                    >
-                      <MaterialIcons name="add" size={20} color="white" />
                     </Pressable>
                   </View>
                 </View>
                 <View style={styles.inputCreateNote}>
                   <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 10 }}>Titulo de la Nota</Text>
                   <BottomSheetTextInput style={styles.inputSearch} placeholder="Ingrese el Titulo de la Nota" />
-                  
                 </View>
                 <View style={styles.inputCreateNote}>
                   <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 10, marginTop: 20 }}>Detalles de la Nota</Text>
-                  <BottomSheetTextInput vstyle={styles.inputDetailsNote}
+                  <BottomSheetTextInput style={styles.inputDetailsNote}
                     placeholder="Ingrese los detalles de la Nota"
                     multiline={true}
                     numberOfLines={10} />
-                  
                 </View>
-              </BottomSheetView>
+                {/* Mostrar imágenes */}
+                {images.length > 0 && (
+                  <View style={{ width: '100%', marginTop: 10 }}>
+                    <Text style={{ fontWeight: 'bold' }}>Imágenes:</Text>
+                    {images.map((img, idx) => (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <Image source={{ uri: img.uri }} style={styles.image} />
+                        <Text style={{ marginLeft: 10 }}>{timeAgo(img.addedAt)} atrás</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {/* Mostrar videos */}
+                {videos.length > 0 && (
+                  <View style={{ width: '100%', marginTop: 10 }}>
+                    <Text style={{ fontWeight: 'bold' }}>Videos:</Text>
+                    {videos.map((vid, idx) => (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ width: 100, height: 100, backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center' }}>
+                          <MaterialIcons name="movie" size={40} color="#2196F3" />
+                        </View>
+                        <Text style={{ marginLeft: 10 }}>{timeAgo(vid.addedAt)} atrás</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </BottomSheetScrollView>
             </KeyboardAvoidingView>
           </BottomSheetModal>
 
           {/* BottomSheetModal para ver detalles de la nota */}
-          <BottomSheetModal style={{backgroundColor: "#e3e3e3"}}
+          <BottomSheetModal
             ref={detailSheetRef}
             onChange={handleSheetChanges}
             snapPoints={['60%']}
             enablePanDownToClose={true}
           >
-            <BottomSheetView style={styles.contentContainerNote} >
-              {selectedNote ? (
-                <View style={{ width: '100%' }}>
-                  <BottomSheetTextInput style={styles.textTitleNote} value={selectedNote.title}/>
-                  <Text style={{ marginBottom: 10 }}>{selectedNote.date}</Text>
-                  <BottomSheetTextInput multiline={true} style={{ fontSize: 16, height: 'auto' }} value={selectedNote.details}/>
-                </View>
-              ) : (
-                <Text>No hay nota seleccionada</Text>
-              )}
+            <BottomSheetView style={styles.contentContainerNote}> {/* Use BottomSheetView for the container */}
+              <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1 }}> {/* Use BottomSheetScrollView here */}
+                {selectedNote ? (
+                  <View style={{ width: '100%' }}>
+                    <BottomSheetTextInput style={styles.textTitleNote} value={selectedNote.title} />
+                    <Text style={{ marginBottom: 10 }}>{selectedNote.date}</Text>
+                    <BottomSheetTextInput multiline={true} style={{ fontSize: 16, height: 'auto' }} value={selectedNote.details} />
+                  </View>
+                ) : (
+                  <Text>No hay nota seleccionada</Text>
+                )}
+              </BottomSheetScrollView>
             </BottomSheetView>
           </BottomSheetModal>
         </View>
@@ -269,17 +335,12 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    alignItems: 'center',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     paddingTop: 20,
   },
   contentContainerNote: {
     padding: 20,
     alignItems: 'center',
     flex: 1,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
   },
   creatNote: {
     gap: 50,
@@ -323,5 +384,9 @@ const styles = StyleSheet.create({
   },
   keyboardAvoidingView: {
     flex: 1,
+  },
+  image: {
+    width: 200,
+    height: 200,
   },
 });

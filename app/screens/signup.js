@@ -4,14 +4,39 @@ import logo from '../../assets/logoBg.png';
 import { ScrollView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
 export default function RegisterScreen({ navigation }) {
-    const [username, setUsername] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleRegister = () => {
-        // Aquí va la lógica de registro
-        console.log('User registered:', { username, email, password });
-        navigation.navigate('Home');
+    const handleRegister = async () => {
+        if (!firstName || !lastName || !email || !password) {
+            Alert.alert('Error', 'Por favor completa todos los campos');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const response = await authAPI.register({
+                firstName,
+                lastName,
+                email,
+                password
+            });
+            
+            // Guardar token y datos de usuario
+            await AsyncStorage.setItem('userToken', response.data.token);
+            await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+            
+            // Navegar a la pantalla principal
+            navigation.navigate('Home');
+        } catch (error) {
+            console.error('Registration error:', error);
+            Alert.alert('Error', error.response?.data?.error || 'Error al registrar usuario');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

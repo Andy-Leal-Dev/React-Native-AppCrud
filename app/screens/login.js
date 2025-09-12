@@ -3,12 +3,35 @@ import { View, Text, Platform,Keyboard,TextInput, TouchableOpacity, StyleSheet, 
 import logo from '../../assets/logoBg.png';
 import { ScrollView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
+import { authApi } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function LoginScreen({ navigation }) {
-    const [email, setEmail] = useState('');
+   const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleLogin = () => {
-        navigation.navigate('Profile');
+    const handleLogin = async () => {
+        if (!email || !password) {
+            Alert.alert('Error', 'Por favor ingresa email y contraseña');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const response = await authApi.login(email, password);
+            
+            // Guardar token y datos de usuario
+            await AsyncStorage.setItem('userToken', response.data.token);
+            await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+            
+            // Navegar a la pantalla principal
+            navigation.navigate('Home');
+        } catch (error) {
+            console.error('Login error:', error);
+            Alert.alert('Error', error.response?.data?.error || 'Error al iniciar sesión');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

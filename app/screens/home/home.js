@@ -274,7 +274,7 @@ export default function HomeScreen() {
         <View style={styles.container}>
            <ScrollView>
             <View style={styles.header}>
-              <Text style={styles.textHeader}>Hola! Pedro XXXXXX</Text>
+              <Text style={styles.textHeader}>Hola!</Text>
               <View style={styles.ViewSearch}>
                 <TextInput 
                   placeholder="Buscar notas por título o contenido" 

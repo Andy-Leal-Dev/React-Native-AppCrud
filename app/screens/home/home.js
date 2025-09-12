@@ -1,5 +1,4 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { MMKV } from 'react-native-mmkv';
 import {
   View,
   Text,
@@ -21,9 +20,17 @@ import {
   BottomSheetView,
   BottomSheetModalProvider,
   BottomSheetTextInput,
-  BottomSheetScrollView // Import BottomSheetScrollView
+  BottomSheetScrollView
 } from '@gorhom/bottom-sheet';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AddNoteBottomSheet from '../../components/addNoteBottomSheet';
+import NoteDetailBottomSheet from '../../components/noteDetailBottomSheet';
+
+// Directorio para guardar archivos
+const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
+const NOTES_CACHE_KEY = '@notes_cache';
 
 // Función para calcular tiempo relativo
 function timeAgo(date) {
@@ -35,11 +42,40 @@ function timeAgo(date) {
   return `${Math.floor(diff / 86400)} d`;
 }
 
-const storage = new MMKV();
+// Función para asegurar que el directorio existe
+async function ensureDirExists() {
+  const dirInfo = await FileSystem.getInfoAsync(NOTES_DIR);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(NOTES_DIR, { intermediates: true });
+  }
+}
 
-function getNotesFromCache() {
-  const cached = storage.getString('notes');
-  return cached ? JSON.parse(cached) : note.data;
+// Función para copiar archivo al directorio de notas
+async function copyFileToNotesDir(fileUri, fileName) {
+  await ensureDirExists();
+  const newPath = NOTES_DIR + fileName;
+  await FileSystem.copyAsync({ from: fileUri, to: newPath });
+  return newPath;
+}
+
+// Función para cargar notas desde cache
+async function loadNotesFromCache() {
+  try {
+    const cachedNotes = await AsyncStorage.getItem(NOTES_CACHE_KEY);
+    return cachedNotes ? JSON.parse(cachedNotes) : [];
+  } catch (error) {
+    console.error('Error loading notes from cache:', error);
+    return [];
+  }
+}
+
+// Función para guardar notas en cache
+async function saveNotesToCache(notes) {
+  try {
+    await AsyncStorage.setItem(NOTES_CACHE_KEY, JSON.stringify(notes));
+  } catch (error) {
+    console.error('Error saving notes to cache:', error);
+  }
 }
 
 export default function HomeScreen() {
@@ -49,17 +85,39 @@ export default function HomeScreen() {
   const [videos, setVideos] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
 
-  // NUEVO: Estado para notas
-  const [notes, setNotes] = useState(getNotesFromCache());
+  const [searchQuery, setSearchQuery] = useState(''); // Estado para la búsqueda
 
-  // NUEVO: Estados para inputs de nueva nota
+  // Estado para notas
+  const [notes, setNotes] = useState([]);
+  const [filteredNotes, setFilteredNotes] = useState([]); // Notas filtradas
+
+
+  // Cargar notas al iniciar
+   useEffect(() => {
+    const loadNotes = async () => {
+      const cachedNotes = await loadNotesFromCache();
+      setNotes(cachedNotes);
+      setFilteredNotes(cachedNotes); // Inicialmente mostrar todas las notas
+    };
+    loadNotes();
+  }, []);
+
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredNotes(notes);
+    } else {
+      const query = searchQuery.toLowerCase().trim();
+      const filtered = notes.filter(note => 
+        note.title.toLowerCase().includes(query) || 
+        note.details.toLowerCase().includes(query)
+      );
+      setFilteredNotes(filtered);
+    }
+  }, [searchQuery, notes]);
+
+  // Estados para inputs de nueva nota
   const [newTitle, setNewTitle] = useState('');
   const [newDetails, setNewDetails] = useState('');
-
-  // Guardar notas en cache cada vez que cambian
-  useEffect(() => {
-    storage.set('notes', JSON.stringify(notes));
-  }, [notes]);
 
   // callbacks
   const handlePresentAddNoteSheet = useCallback(() => {
@@ -73,22 +131,100 @@ export default function HomeScreen() {
     console.log('handleSheetChanges', index);
   }, []);
 
-  // NUEVO: Agregar nota
-  const handleAddNote = () => {
+  // Agregar nota
+  const handleAddNote = async () => {
     if (!newTitle.trim()) return;
+    
+    // Copiar archivos al directorio de notas
+    const copiedImages = [];
+    for (const img of images) {
+      try {
+        const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        const newPath = await copyFileToNotesDir(img.uri, fileName);
+        copiedImages.push({
+          uri: newPath,
+          fileName: fileName,
+          fileSize: img.fileSize || 0,
+          addedAt: new Date(),
+        });
+      } catch (error) {
+        console.error('Error copying image:', error);
+      }
+    }
+
+    const copiedVideos = [];
+    for (const vid of videos) {
+      try {
+        const fileName = `video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+        const newPath = await copyFileToNotesDir(vid.uri, fileName);
+        copiedVideos.push({
+          uri: newPath,
+          fileName: fileName,
+          fileSize: vid.fileSize || 0,
+          addedAt: new Date(),
+        });
+      } catch (error) {
+        console.error('Error copying video:', error);
+      }
+    }
+
     const newNote = {
+      id: Date.now().toString(),
       title: newTitle,
       date: new Date().toLocaleDateString('es-ES'),
+      timestamp: Date.now(),
       details: newDetails,
-      images,
-      videos,
+      images: copiedImages,
+      videos: copiedVideos,
     };
-    setNotes([...notes, newNote]);
+
+    const updatedNotes = [...notes, newNote];
+    setNotes(updatedNotes);
+    await saveNotesToCache(updatedNotes);
+    
     setNewTitle('');
     setNewDetails('');
     setImages([]);
     setVideos([]);
     addNoteSheetRef.current?.close();
+  };
+
+  // Eliminar archivo
+  const deleteFile = async (fileUri) => {
+    try {
+      await FileSystem.deleteAsync(fileUri);
+    } catch (error) {
+      console.error('Error deleting file:', error);
+    }
+  };
+
+  // Eliminar nota
+  const handleDeleteNote = async (noteId) => {
+    try {
+      const noteToDelete = notes.find(note => note.id === noteId);
+      
+      // Eliminar archivos asociados
+      if (noteToDelete.images) {
+        for (const img of noteToDelete.images) {
+          await deleteFile(img.uri);
+        }
+      }
+      
+      if (noteToDelete.videos) {
+        for (const vid of noteToDelete.videos) {
+          await deleteFile(vid.uri);
+        }
+      }
+      
+      // Actualizar estado y cache
+      const updatedNotes = notes.filter(note => note.id !== noteId);
+      setNotes(updatedNotes);
+      await saveNotesToCache(updatedNotes);
+      
+      detailSheetRef.current?.close();
+    } catch (error) {
+      console.error('Error deleting note:', error);
+    }
   };
 
   // Selección de imágenes
@@ -110,9 +246,6 @@ export default function HomeScreen() {
       }));
      
       setImages(prev => [...prev, ...newImages]);
-       console.log(newImages);
-      console.log(result)
-      console.log(assets)
     }
   };
 
@@ -139,185 +272,125 @@ export default function HomeScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <View style={styles.container}>
-          <ScrollView>
+           <ScrollView>
             <View style={styles.header}>
               <Text style={styles.textHeader}>Hola! Pedro XXXXXX</Text>
               <View style={styles.ViewSearch}>
-                <TextInput placeholder="Ingrese el Titulo de la Nota" />
+                <TextInput 
+                  placeholder="Buscar notas por título o contenido" 
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  style={styles.searchInput}
+                />
                 <TouchableOpacity>
                   <Ionicons name="search-sharp" size={24} color="black" />
                 </TouchableOpacity>
               </View>
+              {searchQuery.trim() !== '' && (
+                <Text style={styles.searchResultsText}>
+                  {filteredNotes.length} {filteredNotes.length === 1 ? 'nota encontrada' : 'notas encontradas'}
+                </Text>
+              )}
             </View>
-            <View key={'0'} style={styles.containerCardNote}>
-              {notes.map((item, idx) => (
-                <Pressable
-                  key={idx}
-                  style={styles.cardNote}
-                  onPress={() => handlePresentDetailSheet(item)}
-                >
-                  <View style={styles.viewCardNote}>
-                    <Text style={styles.textTitleNote}>{item.title}</Text>
-                    <Text style={styles.textCardNote}>{item.date}</Text>
-                    <Text
-                      style={styles.textCardNote}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >{item.details}</Text>
-                    <Text style={styles.textDetails}>Presiona para ver más detalles</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
+            
+            {filteredNotes.length === 0 && searchQuery.trim() !== '' ? (
+              <View style={styles.noResultsContainer}>
+                <Ionicons name="search-outline" size={50} color="#ccc" />
+                <Text style={styles.noResultsText}>No se encontraron notas</Text>
+                <Text style={styles.noResultsSubText}>
+                  Intenta con diferentes palabras clave o crea una nueva nota
+                </Text>
+              </View>
+            ) : (
+              <View key={'0'} style={styles.containerCardNote}>
+                {filteredNotes.map((item, idx) => (
+                  <Pressable
+                    key={item.id || idx}
+                    style={styles.cardNote}
+                    onPress={() => handlePresentDetailSheet(item)}
+                  >
+                    <View style={styles.viewCardNote}>
+                      {/* Resaltar texto coincidente en el título */}
+                      {searchQuery.trim() !== '' ? (
+                        <Text style={styles.textTitleNote}>
+                          {highlightText(item.title, searchQuery)}
+                        </Text>
+                      ) : (
+                        <Text style={styles.textTitleNote}>{item.title}</Text>
+                      )}
+                      
+                      <Text style={styles.textCardNote}>{item.date}</Text>
+                      
+                      {/* Resaltar texto coincidente en los detalles */}
+                      {searchQuery.trim() !== '' ? (
+                        <Text
+                          style={styles.textCardNote}
+                          numberOfLines={2}
+                          ellipsizeMode="tail"
+                        >
+                          {highlightText(item.details, searchQuery)}
+                        </Text>
+                      ) : (
+                        <Text
+                          style={styles.textCardNote}
+                          numberOfLines={2}
+                          ellipsizeMode="tail"
+                        >
+                          {item.details}
+                        </Text>
+                      )}
+                      
+                      <Text style={styles.textDetails}>Presiona para ver más detalles</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             <Text style={{height:30}}/>
           </ScrollView>
           <TouchableOpacity style={styles.floatingButton} onPress={handlePresentAddNoteSheet}>
             <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
 
-          {/* BottomSheetModal para agregar nueva nota */}
-          <BottomSheetModal
+           <AddNoteBottomSheet
             ref={addNoteSheetRef}
             onChange={handleSheetChanges}
-            snapPoints={['80%']}
-            enablePanDownToClose={true}
-            style={{ flex: 1,  marginTop: Constants.statusBarHeight, }}
-          >
-            <BottomSheetScrollView style={{flex:1, height:'100%', }}> 
-              <View style={styles.creatNote}>
-                <Text style={{ fontSize: 20, fontWeight: '600' }}>Agregar Nueva Nota</Text>
-                <View style={styles.creatNoteOptions}>
-                  <Pressable
-                    style={{
-                      backgroundColor: '#449DD1',
-                      padding: 6,
-                      borderRadius: 30
-                    }}
-                    onPress={pickImage}
-                  >
-                    <MaterialIcons name="add-a-photo" size={20} color="white" />
-                  </Pressable>
-                  <Pressable
-                    style={{
-                      backgroundColor: '#449DD1',
-                      padding: 6,
-                      borderRadius: 30
-                    }}
-                    onPress={pickVideo}
-                  >
-                    <MaterialIcons name="movie" size={20} color="white" />
-                  </Pressable>
-                </View>
-              </View>
-              <View style={styles.inputCreateNote}>
-                <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 10 }}>Titulo de la Nota</Text>
-                <BottomSheetTextInput
-                  style={styles.inputSearch}
-                  placeholder="Ingrese el Titulo de la Nota"
-                  value={newTitle}
-                  onChangeText={setNewTitle}
-                />
-              </View>
-              <View style={styles.inputCreateNote}>
-                <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 10, marginTop: 20 }}>Detalles de la Nota</Text>
-                <BottomSheetTextInput
-                  style={styles.inputDetailsNote}
-                  placeholder="Ingrese los detalles de la Nota"
-                  multiline={true}
-                  numberOfLines={10}
-                  value={newDetails}
-                  onChangeText={setNewDetails}
-                />
-              </View>
-              
-              {images.length > 0 && (
-                <View style={{ width: '100%', marginTop: 10, paddingBottom:20, paddingLeft:10 , paddingRight:10  }}>
-                  <Text style={{ fontWeight: 'bold' }}>Imágenes:</Text>
-                  {images.map((img, idx) => (
-                    <View key={idx} style={styles.preViewImage}>
-                      <Image source={{ uri: img.uri }} style={styles.image} />
-                      <View style={{ flex: 1, justifyContent: 'flex-start', gap: 5 }}>
-                        <Text>{img.fileName}</Text>
-                        <Text >{(img.fileSize / 1024).toFixed(2)} KB</Text>
-                        <Text >{timeAgo(img.addedAt)} atrás</Text>
-                      </View>
-                      <Pressable style={{ padding: 5 }}>
-                        <Ionicons name="close-circle" size={30} color="#f44336" onPress={() => {
-                          setImages(images.filter((_, i) => i !== idx));
-                        }} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {/* Mostrar videos */}
-              {videos.length > 0 && (
-                <View style={{ width: '100%', marginTop: 10,  paddingBottom:20, paddingLeft:10 , paddingRight:10 }}>
-                  <Text style={{ fontWeight: 'bold' }}>Videos:</Text>
-                  {videos.map((vid, idx) => (
-                    <View key={idx} style={styles.preViewVideo}>
-                      <View style={styles.videoThumb}>
-                        <MaterialIcons name="movie" size={40} color="#2196F3" />
-                      </View>
-                      <View style={{ flex: 1, justifyContent: 'flex-start', gap: 5 }}>
-                        <Text>{vid.fileName}</Text>
-                        <Text >{(vid.fileSize / (1024 * 1024)).toFixed(2)} MB</Text>
-                        <Text >{timeAgo(vid.addedAt)} atrás</Text>
-                      </View>
-                      <Pressable style={{ padding: 5 }}>
-                        <Ionicons name="close-circle" size={30} color="#f44336" onPress={() => {
-                          setVideos(videos.filter((_, i) => i !== idx));
-                        }} />
-                      </Pressable>
-                   </View>
-                    
-                  ))}
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={{
-                  backgroundColor: COLORS.primary,
-                  padding: 14,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                  margin: 20,
-                }}
-                onPress={handleAddNote}
-              >
-                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Guardar Nota</Text>
-              </TouchableOpacity>
-              <Text style={{height:30}}/>
-            </BottomSheetScrollView>
-          </BottomSheetModal>
-
-          {/* BottomSheetModal para ver detalles de la nota */}
-          <BottomSheetModal
+            newTitle={newTitle}
+            setNewTitle={setNewTitle}
+            newDetails={newDetails}
+            setNewDetails={setNewDetails}
+            images={images}
+            setImages={setImages}
+            videos={videos}
+            setVideos={setVideos}
+            pickImage={pickImage}
+            pickVideo={pickVideo}
+            handleAddNote={handleAddNote}
+            timeAgo={timeAgo}
+          />
+          
+          <NoteDetailBottomSheet
             ref={detailSheetRef}
             onChange={handleSheetChanges}
-            snapPoints={['60%']}
-            enablePanDownToClose={true}
-          >
-            <BottomSheetView style={styles.contentContainerNote}> {/* Use BottomSheetView for the container */}
-              <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1 }}> {/* Use BottomSheetScrollView here */}
-                {selectedNote ? (
-                  <View style={{ width: '100%' }}>
-                    <BottomSheetTextInput style={styles.textTitleNote} value={selectedNote.title} />
-                    <Text style={{ marginBottom: 10 }}>{selectedNote.date}</Text>
-                    <BottomSheetTextInput multiline={true} style={{ fontSize: 16, height: 'auto' }} value={selectedNote.details} />
-                  </View>
-                ) : (
-                  <Text>No hay nota seleccionada</Text>
-                )}
-              </BottomSheetScrollView>
-            </BottomSheetView>
-          </BottomSheetModal>
+            selectedNote={selectedNote}
+            handleDeleteNote={handleDeleteNote}
+            timeAgo={timeAgo}
+          />
         </View>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }
-
+const highlightText = (text, query) => {
+  if (!query.trim()) return text;
+  
+  const parts = text.split(new RegExp(`(${query})`, 'gi'));
+  return parts.map((part, index) => 
+    part.toLowerCase() === query.toLowerCase() ? 
+      <Text key={index} style={{ backgroundColor: '#FFEB3B', fontWeight: 'bold' }}>{part}</Text> : 
+      part
+  );
+};
 
 const COLORS = {
   primary: "#2196F3",
@@ -335,6 +408,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: '100%',
     backgroundColor: COLORS.background,
+  },
+  searchInput: {
+    flex: 1,
+    padding: 8,
+  },
+  searchResultsText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    marginTop: 20,
+  },
+  noResultsText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+    marginTop: 16,
+  },
+  noResultsSubText: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 8,
   },
   header: {
     paddingTop: 20,

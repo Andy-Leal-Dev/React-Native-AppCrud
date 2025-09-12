@@ -6,8 +6,31 @@ import RegisterScreen from '../signup';
 const Stack = createStackNavigator();
 
 const StackNavigator = () => {
+
+   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      setIsAuthenticated(!!token);
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return null; // o un componente de carga
+  }
+
       return (
-    <Stack.Navigator initialRouteName="Login">
+    <Stack.Navigator initialRouteName={isAuthenticated ? "Profile" : "Login"}>
       <Stack.Screen 
         name="Profile" 
         component={ProfileScreen} 

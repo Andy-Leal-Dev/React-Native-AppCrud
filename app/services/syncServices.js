@@ -114,15 +114,34 @@ export const loadNotesFromBackend = async () => {
 };
 
 // Sincronizar inicialmente (al iniciar la app)
+
 export const initialSync = async () => {
   try {
     // Primero intentamos cargar desde el backend
     const backendNotes = await loadNotesFromBackend();
-    await saveNotesToCache(backendNotes);
-    return backendNotes;
+    const localNotes = await loadNotesFromCache();
+    
+    // Fusionar notas: priorizar backend pero mantener locales no sincronizadas
+    const mergedNotes = mergeNotes(backendNotes, localNotes);
+    
+    await saveNotesToCache(mergedNotes);
+    return mergedNotes;
   } catch (error) {
     console.error('Initial sync failed, using cached notes:', error);
     // Si falla, usamos las notas en cache
     return await loadNotesFromCache();
   }
+};
+
+// Función para fusionar notas
+const mergeNotes = (backendNotes, localNotes) => {
+  const backendNoteIds = new Set(backendNotes.map(note => note.id));
+  
+  // Agregar notas locales que no están en el backend
+  const localNotesToKeep = localNotes.filter(note => 
+    !backendNoteIds.has(note.id) || !note.synced
+  );
+  
+  // Combinar, priorizando backend
+  return [...backendNotes, ...localNotesToKeep];
 };

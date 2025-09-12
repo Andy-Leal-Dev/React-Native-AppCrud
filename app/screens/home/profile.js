@@ -2,16 +2,58 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView }
 import Constants from 'expo-constants';
 import { MaterialIcons } from '@expo/vector-icons';
 import { TouchableWithoutFeedback } from "@gorhom/bottom-sheet";
-
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useEffect, useState } from "react";
 
 export default function ProfileScreen({ navigation }) {
-  const handleLogin = () => {
-        navigation.navigate('Login');
-    };
+    const [user, setUser] = useState(null);
 
-  return (
-    
-     <View style={styles.container}>
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userData');
+      navigation.replace('Login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
+  const handleLogin = () => {
+    navigation.navigate('Login');
+  };
+
+   if (!user) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.cardProfile}>
+          <Text style={styles.textHeader}>Mi Perfil</Text>
+          <Text style={styles.notLoggedText}>No has iniciado sesión</Text>
+          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+            <MaterialIcons name="login" size={20} color="white" />
+            <Text style={styles.loginText}>Iniciar sesión</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+return (
+    <View style={styles.container}>
       <View style={styles.cardProfile}>
         <Text style={styles.textHeader}>Mi Perfil</Text>
         <View style={styles.avatarContainer}>
@@ -20,20 +62,20 @@ export default function ProfileScreen({ navigation }) {
             style={styles.avatar}
           />
         </View>
-        <Text style={styles.name}>Juan Pérez</Text>
-        <Text style={styles.email}>juan.perez@email.com</Text>
+        <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
+        <Text style={styles.email}>{user.email}</Text>
         <TouchableOpacity style={styles.editButton}>
           <MaterialIcons name="edit" size={20} color="#4f8ef7" />
           <Text style={styles.editText}>Editar perfil</Text>
         </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogin}>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <MaterialIcons name="logout" size={24} color="white" />
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </TouchableOpacity>
     </View>
   );
-}
+ }
 
 
 
@@ -112,6 +154,25 @@ const styles = StyleSheet.create({
     color: '#4f8ef7',
     fontSize: 15,
     marginLeft: 6,
+    fontWeight: 'bold',
+  },
+    notLoggedText: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 20,
+  },
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4f8ef7',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  loginText: {
+    color: 'white',
+    fontSize: 16,
+    marginLeft: 8,
     fontWeight: 'bold',
   },
 });

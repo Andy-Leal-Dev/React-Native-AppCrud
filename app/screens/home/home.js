@@ -105,21 +105,36 @@ export default function HomeScreen() {
     initialApp();
   }, []);
 
-  const syncPendingNotes = async () => {
+const syncPendingNotes = async () => {
+  try {
+    setIsSyncing(true);
+    
+    // Primero sincronizar la cola
+    await syncNotesWithBackend();
+    
+    // Luego cargar todas las notas del backend y fusionar
+    const backendNotes = await loadNotesFromBackend();
+    const localNotes = await loadNotesFromCache();
+    
+    const mergedNotes = [...backendNotes];
+    
+    // Agregar notas locales que no están sincronizadas
+    localNotes.forEach(localNote => {
+      if (!localNote.synced || !backendNotes.some(backendNote => backendNote.id === localNote.id)) {
+        mergedNotes.push(localNote);
+      }
+    });
+    
+    await saveNotesToCache(mergedNotes);
+    setNotes(mergedNotes);
+    setFilteredNotes(mergedNotes);
 
-    try {
-         setIsSyncing(true);
-         await syncNotesWithBackend();
-         const updatedNotes = await loadNotesFromCache();
-         setNotes(updatedNotes);
-         setFilteredNotes(updatedNotes);
-
-    } catch (error) {
-      console.error('Error syncing notes:', error);
-    } finally {
-      setIsSyncing(false);
-    }
+  } catch (error) {
+    console.error('Error syncing notes:', error);
+  } finally {
+    setIsSyncing(false);
   }
+}
 
   // Agregar botón de sincronización manual
 

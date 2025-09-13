@@ -60,7 +60,17 @@ async function copyFileToNotesDir(fileUri, fileName) {
   return newPath;
 }
 
+// Función para resaltar texto con claves únicas
+const highlightText = (text, query, noteId) => {
+  if (!query.trim()) return text;
 
+  const parts = text.split(new RegExp(`(${query})`, 'gi'));
+  return parts.map((part, index) =>
+    part.toLowerCase() === query.toLowerCase() ?
+      <Text key={`${noteId}-${index}-${part}-${Math.random().toString(36).substring(2, 9)}`} style={{ backgroundColor: '#FFEB3B', fontWeight: 'bold' }}>{part}</Text> :
+      part
+  );
+};
 
 export default function HomeScreen() {
   const addNoteSheetRef = useRef(null);
@@ -105,37 +115,37 @@ export default function HomeScreen() {
     initialApp();
   }, []);
 
+// En home.js, reemplazar la función syncPendingNotes
 const syncPendingNotes = async () => {
   try {
     setIsSyncing(true);
     
     // Primero sincronizar la cola
-    await syncNotesWithBackend();
+    const syncResults = await syncNotesWithBackend();
     
-    // Luego cargar todas las notas del backend y fusionar
+    // Si la sincronización fue exitosa, limpiar la cola
+    if (syncResults.some(result => result.success)) {
+      await clearSyncQueue();
+    }
+    
+    // Luego cargar todas las notas del backend
     const backendNotes = await loadNotesFromBackend();
-    const localNotes = await loadNotesFromCache();
     
-    const mergedNotes = [...backendNotes];
-    
-    // Agregar notas locales que no están sincronizadas
-    localNotes.forEach(localNote => {
-      if (!localNote.synced || !backendNotes.some(backendNote => backendNote.id === localNote.id)) {
-        mergedNotes.push(localNote);
-      }
-    });
-    
-    await saveNotesToCache(mergedNotes);
-    setNotes(mergedNotes);
-    setFilteredNotes(mergedNotes);
+    // Guardar solo las notas del backend en caché
+    await saveNotesToCache(backendNotes);
+    setNotes(backendNotes);
+    setFilteredNotes(backendNotes);
 
   } catch (error) {
     console.error('Error syncing notes:', error);
+    // En caso de error, mantener las notas locales
+    const cachedNotes = await loadNotesFromCache();
+    setNotes(cachedNotes);
+    setFilteredNotes(cachedNotes);
   } finally {
     setIsSyncing(false);
   }
 }
-
   // Agregar botón de sincronización manual
 
   useEffect(() => {
@@ -166,109 +176,77 @@ const syncPendingNotes = async () => {
   const handleSheetChanges = useCallback((index) => {
     console.log('handleSheetChanges', index);
   }, []);
-  const handleAddNote = async () => {
-     if (!newTitle.trim()) return;
+  // En home.js, mejorar handleAddNote
+const handleAddNote = async () => {
+  if (!newTitle.trim()) return;
 
-  // Limpiar datos
-  const cleanNote = {
+  const newNoteId = generateUniqueId();
+  
+  // Copiar archivos al directorio de notas si el usuario está logueado
+  let finalImages = images;
+  let finalVideos = videos;
+  
+  if (user) {
+    try {
+      finalImages = [];
+      for (const img of images) {
+        const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        const newPath = await copyFileToNotesDir(img.uri, fileName);
+        finalImages.push({
+          uri: newPath,
+          fileName: fileName,
+          fileSize: img.fileSize || 0,
+          type: 'image/jpeg',
+          addedAt: new Date(),
+        });
+      }
+      
+      finalVideos = [];
+      for (const vid of videos) {
+        const fileName = `video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+        const newPath = await copyFileToNotesDir(vid.uri, fileName);
+        finalVideos.push({
+          uri: newPath,
+          fileName: fileName,
+          fileSize: vid.fileSize || 0,
+          type: 'video/mp4',
+          addedAt: new Date(),
+        });
+      }
+    } catch (error) {
+      console.error('Error copying files:', error);
+    }
+  }
+
+  const newNote = {
+    id: newNoteId,
     title: newTitle.trim(),
     details: newDetails.trim() || '',
-    images: images.map(img => ({
-      uri: img.uri,
-      fileName: img.fileName,
-      fileSize: img.fileSize,
-      type: 'image/jpeg' // Asegurar type
-    })),
-    videos: videos.map(vid => ({
-      uri: vid.uri,
-      fileName: vid.fileName,
-      fileSize: vid.fileSize,
-      type: 'video/mp4' // Asegurar type
-    }))
+    date: new Date().toLocaleDateString('es-ES'),
+    timestamp: Date.now(),
+    images: finalImages,
+    videos: finalVideos,
+    synced: !user // Si no hay usuario, no está sincronizada
   };
 
+  const updatedNotes = [...notes, newNote];
+  setNotes(updatedNotes);
+  setFilteredNotes(updatedNotes);
+  await saveNotesToCache(updatedNotes);
 
-    if (!user) {
-      // Solo local
-      const newNote = {
-        id: Date.now().toString(),
-        title: newTitle,
-        date: new Date().toLocaleDateString('es-ES'),
-        timestamp: Date.now(),
-        details: newDetails,
-        images: images,
-        videos: videos,
-        synced: false
-      };
+  // Si hay usuario, sincronizar inmediatamente
+  if (user) {
+    await addToSyncQueue(newNote, 'create');
+    syncPendingNotes();
+  }
 
-      const updatedNotes = [...notes, newNote];
-      setNotes(updatedNotes);
-      setFilteredNotes(updatedNotes);
-      await saveNotesToCache(updatedNotes);
-
-      await addToSyncQueue(newNote, 'create');
-      setNewTitle('');
-      setNewDetails('');
-      setImages([]);
-      setVideos([]);
-      addNoteSheetRef.current?.close();
-      syncPendingNotes();
-    } else {
-      // Usuario logueado: copiar archivos y guardar
-      const copiedImages = [];
-      for (const img of images) {
-        try {
-          const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-          const newPath = await copyFileToNotesDir(img.uri, fileName);
-          copiedImages.push({
-            uri: newPath,
-            fileName: fileName,
-            fileSize: img.fileSize || 0,
-            addedAt: new Date(),
-          });
-        } catch (error) {
-          console.error('Error copying image:', error);
-        }
-      }
-
-      const copiedVideos = [];
-      for (const vid of videos) {
-        try {
-          const fileName = `video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
-          const newPath = await copyFileToNotesDir(vid.uri, fileName);
-          copiedVideos.push({
-            uri: newPath,
-            fileName: fileName,
-            fileSize: vid.fileSize || 0,
-            addedAt: new Date(),
-          });
-        } catch (error) {
-          console.error('Error copying video:', error);
-        }
-      }
-
-      const newNote = {
-        id: Date.now().toString(),
-        title: newTitle,
-        date: new Date().toLocaleDateString('es-ES'),
-        timestamp: Date.now(),
-        details: newDetails,
-        images: copiedImages,
-        videos: copiedVideos,
-      };
-
-      const updatedNotes = [...notes, newNote];
-      setNotes(updatedNotes);
-      setFilteredNotes(updatedNotes);
-      await saveNotesToCache(updatedNotes);
-
-      setNewTitle('');
-      setNewDetails('');
-      setImages([]);
-      setVideos([]);
-      addNoteSheetRef.current?.close();
-    }
-  };
+  // Limpiar estado
+  setNewTitle('');
+  setNewDetails('');
+  setImages([]);
+  setVideos([]);
+  addNoteSheetRef.current?.close();
+};
 
   // Función para eliminar nota
   const handleDeleteNote = async (noteId) => {
@@ -405,9 +383,9 @@ const syncPendingNotes = async () => {
               </View>
             ) : (
               <View key={'0'} style={styles.containerCardNote}>
-                {filteredNotes.map((item, idx) => (
+                {filteredNotes.map((item) => (
                   <Pressable
-                    key={item.id || idx}
+                    key={item.id ? item.id : `note-${Date.now()}-${Math.random()}`}
                     style={styles.cardNote}
                     onPress={() => handlePresentDetailSheet(item)}
                   >
@@ -415,7 +393,7 @@ const syncPendingNotes = async () => {
                       {/* Resaltar texto coincidente en el título */}
                       {searchQuery.trim() !== '' ? (
                         <Text style={styles.textTitleNote}>
-                          {highlightText(item.title, searchQuery)}
+                          {highlightText(item.title, searchQuery, item.id)}
                         </Text>
                       ) : (
                         <Text style={styles.textTitleNote}>{item.title}</Text>
@@ -430,7 +408,7 @@ const syncPendingNotes = async () => {
                           numberOfLines={2}
                           ellipsizeMode="tail"
                         >
-                          {highlightText(item.details, searchQuery)}
+                          {highlightText(item.details, searchQuery, item.id)}
                         </Text>
                       ) : (
                         <Text
@@ -483,16 +461,6 @@ const syncPendingNotes = async () => {
     </GestureHandlerRootView>
   );
 }
-const highlightText = (text, query) => {
-  if (!query.trim()) return text;
-
-  const parts = text.split(new RegExp(`(${query})`, 'gi'));
-  return parts.map((part, index) =>
-    part.toLowerCase() === query.toLowerCase() ?
-      <Text key={index} style={{ backgroundColor: '#FFEB3B', fontWeight: 'bold' }}>{part}</Text> :
-      part
-  );
-};
 
 const COLORS = {
   primary: "#2196F3",

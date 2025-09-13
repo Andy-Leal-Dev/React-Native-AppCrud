@@ -33,7 +33,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
           {selectedNote ? (
             <View style={styles.detailContainer}>
               <Text style={styles.textTitleNote}>{selectedNote.title}</Text>
-              <Text style={{ marginBottom: 10 }}>{selectedNote.date}</Text>
+              <Text style={{ marginBottom: 10 }}>{selectedNote.date || selectedNote.createdAt}</Text>
               <Text style={styles.detailsText}>{selectedNote.details}</Text>
               
               {selectedNote.images && selectedNote.images.length > 0 && (

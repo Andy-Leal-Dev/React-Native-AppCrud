@@ -57,6 +57,7 @@ export const clearSyncQueue = async () => {
 };
 
 // Sincronizar notas con el backend
+// En syncServices.js, modificar syncNotesWithBackend
 export const syncNotesWithBackend = async () => {
   try {
     const queue = await getSyncQueue();
@@ -64,21 +65,42 @@ export const syncNotesWithBackend = async () => {
     
     for (const item of queue) {
       try {
-        // Limpia los datos antes de enviar
-        const cleanNote = {
-          title: item.note.title,
-          details: item.note.details || '',
-          // No enviar propiedades innecesarias
-        };
-
+        // Preparar FormData para enviar archivos
+        const formData = new FormData();
+        
+        formData.append('title', item.note.title.toString());
+        formData.append('details', item.note.details?.toString() || '');
+        
+        // Agregar imágenes si existen
+        if (item.note.images && item.note.images.length > 0) {
+          item.note.images.forEach((image, index) => {
+            formData.append('images', {
+              uri: image.uri,
+              type: image.type || 'image/jpeg',
+              name: image.fileName || `image_${index}.jpg`,
+            });
+          });
+        }
+        
+        // Agregar videos si existen
+        if (item.note.videos && item.note.videos.length > 0) {
+          item.note.videos.forEach((video, index) => {
+            formData.append('videos', {
+              uri: video.uri,
+              type: video.type || 'video/mp4',
+              name: video.fileName || `video_${index}.mp4`,
+            });
+          });
+        }
+        
         let result;
         
         switch (item.action) {
           case 'create':
-            result = await notesApi.create(cleanNote);
+            result = await notesApi.create(formData);
             break;
           case 'update':
-            result = await notesApi.update(item.note.id, cleanNote);
+            result = await notesApi.update(item.note.id, formData);
             break;
           case 'delete':
             result = await notesApi.delete(item.note.id);
@@ -98,7 +120,6 @@ export const syncNotesWithBackend = async () => {
     throw error;
   }
 };
-
 // Cargar todas las notas del backend
 export const loadNotesFromBackend = async () => {
   try {
@@ -112,34 +133,61 @@ export const loadNotesFromBackend = async () => {
 
 // Sincronizar inicialmente (al iniciar la app)
 
+// En syncServices.js, modificar initialSync
 export const initialSync = async () => {
   try {
-    // Primero intentamos cargar desde el backend
+    // Cargar notas del backend
     const backendNotes = await loadNotesFromBackend();
+    
+    // Cargar notas locales
     const localNotes = await loadNotesFromCache();
     
-    // Fusionar notas: priorizar backend pero mantener locales no sincronizadas
-    const mergedNotes = mergeNotes(backendNotes, localNotes);
+    // Filtrar notas locales que no están sincronizadas
+    const unsyncedLocalNotes = localNotes.filter(note => !note.synced);
     
+    // Si no hay notas no sincronizadas, usar las del backend
+    if (unsyncedLocalNotes.length === 0) {
+      await saveNotesToCache(backendNotes);
+      return backendNotes;
+    }
+    
+    // Si hay notas no sincronizadas, mantenerlas junto con las del backend
+    const backendNoteIds = new Set(backendNotes.map(note => note.id));
+    const notesToKeep = unsyncedLocalNotes.filter(note => !backendNoteIds.has(note.id));
+    
+    const mergedNotes = [...backendNotes, ...notesToKeep];
     await saveNotesToCache(mergedNotes);
+    
     return mergedNotes;
+    
   } catch (error) {
-
     console.error('Initial sync failed, using cached notes:', error);
-    // Si falla, usamos las notas en cache
     return await loadNotesFromCache();
   }
 };
 
-// Función para fusionar notas
+// En syncServices.js, agregar esta función
 const mergeNotes = (backendNotes, localNotes) => {
-  const backendNoteIds = new Set(backendNotes.map(note => note.id));
+  const backendNoteMap = new Map();
+  backendNotes.forEach(note => backendNoteMap.set(note.id, note));
   
-  // Agregar notas locales que no están en el backend
-  const localNotesToKeep = localNotes.filter(note => 
-    !backendNoteIds.has(note.id) || !note.synced
-  );
+  const mergedNotes = [...backendNotes];
   
-  // Combinar, priorizando backend
-  return [...backendNotes, ...localNotesToKeep];
+  // Agregar solo notas locales que no están en el backend o no están sincronizadas
+  localNotes.forEach(localNote => {
+    const backendNote = backendNoteMap.get(localNote.id);
+    
+    if (!backendNote) {
+      // Nota local que no existe en backend
+      mergedNotes.push(localNote);
+    } else if (!localNote.synced) {
+      // Nota local no sincronizada, reemplazar la del backend
+      const index = mergedNotes.findIndex(n => n.id === localNote.id);
+      if (index !== -1) {
+        mergedNotes[index] = localNote;
+      }
+    }
+  });
+  
+  return mergedNotes;
 };

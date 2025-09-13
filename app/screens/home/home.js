@@ -116,6 +116,7 @@ export default function HomeScreen() {
   }, []);
 
 // En home.js, reemplazar la función syncPendingNotes
+// En home.js, mejorar syncPendingNotes
 const syncPendingNotes = async () => {
   try {
     setIsSyncing(true);
@@ -124,17 +125,37 @@ const syncPendingNotes = async () => {
     const syncResults = await syncNotesWithBackend();
     
     // Si la sincronización fue exitosa, limpiar la cola
-    if (syncResults.some(result => result.success)) {
+    const hasSuccess = syncResults.some(result => result.success);
+    if (hasSuccess) {
       await clearSyncQueue();
     }
     
     // Luego cargar todas las notas del backend
     const backendNotes = await loadNotesFromBackend();
+    const idCodeMap = await getIdCodeMap();
     
-    // Guardar solo las notas del backend en caché
-    await saveNotesToCache(backendNotes);
-    setNotes(backendNotes);
-    setFilteredNotes(backendNotes);
+    // Combinar con notas locales no sincronizadas
+    const localNotes = await loadNotesFromCache();
+    const unsyncedNotes = localNotes.filter(note => !note.synced);
+    
+    const mergedNotes = [...backendNotes];
+    
+    // Agregar notas locales no sincronizadas que no están en el backend
+    unsyncedNotes.forEach(localNote => {
+      const localKey = localNote.idCode || localNote.id;
+      const existsInBackend = backendNotes.some(backendNote => 
+        (backendNote.idCode || backendNote.id) === localKey
+      );
+      
+      if (!existsInBackend) {
+        mergedNotes.push(localNote);
+      }
+    });
+    
+    // Guardar solo las notas combinadas en caché
+    await saveNotesToCache(mergedNotes);
+    setNotes(mergedNotes);
+    setFilteredNotes(mergedNotes);
 
   } catch (error) {
     console.error('Error syncing notes:', error);
@@ -177,10 +198,12 @@ const syncPendingNotes = async () => {
     console.log('handleSheetChanges', index);
   }, []);
   // En home.js, mejorar handleAddNote
+// En home.js, mejorar handleAddNote
 const handleAddNote = async () => {
   if (!newTitle.trim()) return;
 
   const newNoteId = generateUniqueId();
+  const idCode = generateUniqueId(); // Generar idCode único
   
   // Copiar archivos al directorio de notas si el usuario está logueado
   let finalImages = images;
@@ -220,6 +243,7 @@ const handleAddNote = async () => {
 
   const newNote = {
     id: newNoteId,
+    idCode: idCode, // Incluir idCode para sincronización
     title: newTitle.trim(),
     details: newDetails.trim() || '',
     date: new Date().toLocaleDateString('es-ES'),
@@ -247,7 +271,6 @@ const handleAddNote = async () => {
   setVideos([]);
   addNoteSheetRef.current?.close();
 };
-
   // Función para eliminar nota
   const handleDeleteNote = async (noteId) => {
     const noteToDelete = notes.find(note => note.id === noteId);

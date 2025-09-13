@@ -1,9 +1,37 @@
-// services/syncService.js
+// services/syncServices.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { notesApi, notesAPI } from './api';
+import { notesApi } from './api';
 
 const NOTES_CACHE_KEY = '@notes_cache';
 const SYNC_QUEUE_KEY = '@sync_queue';
+const ID_CODE_MAP_KEY = '@id_code_map';
+
+// Función para generar ID único
+export const generateUniqueId = () => {
+  return Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+};
+
+// Guardar mapeo de ID local a ID del backend
+export const saveIdCodeMap = async (localId, backendId) => {
+  try {
+    const map = await getIdCodeMap();
+    map[localId] = backendId;
+    await AsyncStorage.setItem(ID_CODE_MAP_KEY, JSON.stringify(map));
+  } catch (error) {
+    console.error('Error saving ID code map:', error);
+  }
+};
+
+// Obtener mapeo de ID local a ID del backend
+export const getIdCodeMap = async () => {
+  try {
+    const map = await AsyncStorage.getItem(ID_CODE_MAP_KEY);
+    return map ? JSON.parse(map) : {};
+  } catch (error) {
+    console.error('Error getting ID code map:', error);
+    return {};
+  }
+};
 
 // Cargar notas desde cache
 export const loadNotesFromCache = async () => {
@@ -29,7 +57,15 @@ export const saveNotesToCache = async (notes) => {
 export const addToSyncQueue = async (note, action = 'create') => {
   try {
     const queue = await getSyncQueue();
-    queue.push({ note, action, timestamp: Date.now() });
+    queue.push({ 
+      note: {
+        ...note,
+        // Incluir idCode para referencias cruzadas
+        idCode: note.idCode || note.id
+      }, 
+      action, 
+      timestamp: Date.now() 
+    });
     await AsyncStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
   } catch (error) {
     console.error('Error adding to sync queue:', error);
@@ -57,10 +93,10 @@ export const clearSyncQueue = async () => {
 };
 
 // Sincronizar notas con el backend
-// En syncServices.js, modificar syncNotesWithBackend
 export const syncNotesWithBackend = async () => {
   try {
     const queue = await getSyncQueue();
+    const idCodeMap = await getIdCodeMap();
     const results = [];
     
     for (const item of queue) {
@@ -71,39 +107,72 @@ export const syncNotesWithBackend = async () => {
         formData.append('title', item.note.title.toString());
         formData.append('details', item.note.details?.toString() || '');
         
+        // Incluir idCode si existe
+        if (item.note.idCode) {
+          formData.append('idCode', item.note.idCode.toString());
+        }
+        
         // Agregar imágenes si existen
         if (item.note.images && item.note.images.length > 0) {
           item.note.images.forEach((image, index) => {
-            formData.append('images', {
-              uri: image.uri,
-              type: image.type || 'image/jpeg',
-              name: image.fileName || `image_${index}.jpg`,
-            });
+            // Verificar que el archivo existe antes de agregarlo
+            if (image.uri && image.type) {
+              formData.append('images', {
+                uri: image.uri,
+                type: image.type || 'image/jpeg',
+                name: image.fileName || `image_${index}.jpg`,
+              });
+            }
           });
         }
         
         // Agregar videos si existen
         if (item.note.videos && item.note.videos.length > 0) {
           item.note.videos.forEach((video, index) => {
-            formData.append('videos', {
-              uri: video.uri,
-              type: video.type || 'video/mp4',
-              name: video.fileName || `video_${index}.mp4`,
-            });
+            // Verificar que el archivo existe antes de agregarlo
+            if (video.uri && video.type) {
+              formData.append('videos', {
+                uri: video.uri,
+                type: video.type || 'video/mp4',
+                name: video.fileName || `video_${index}.mp4`,
+              });
+            }
           });
         }
         
         let result;
+        let backendId;
         
         switch (item.action) {
           case 'create':
             result = await notesApi.create(formData);
+            backendId = result.data.id;
+            // Guardar mapeo de ID local a ID del backend
+            if (item.note.idCode && backendId) {
+              await saveIdCodeMap(item.note.idCode, backendId);
+            }
             break;
+            
           case 'update':
-            result = await notesApi.update(item.note.id, formData);
+            // Usar el ID del backend si existe el mapeo
+            const updateId = idCodeMap[item.note.idCode] || item.note.id;
+            if (updateId) {
+              result = await notesApi.update(updateId, formData);
+            }
             break;
+            
           case 'delete':
-            result = await notesApi.delete(item.note.id);
+            // Usar el ID del backend si existe el mapeo
+            const deleteId = idCodeMap[item.note.idCode] || item.note.id;
+            if (deleteId) {
+              result = await notesApi.delete(deleteId);
+              // Eliminar del mapeo después de borrar
+              if (item.note.idCode) {
+                const newMap = { ...idCodeMap };
+                delete newMap[item.note.idCode];
+                await AsyncStorage.setItem(ID_CODE_MAP_KEY, JSON.stringify(newMap));
+              }
+            }
             break;
         }
         
@@ -120,6 +189,7 @@ export const syncNotesWithBackend = async () => {
     throw error;
   }
 };
+
 // Cargar todas las notas del backend
 export const loadNotesFromBackend = async () => {
   try {
@@ -132,8 +202,6 @@ export const loadNotesFromBackend = async () => {
 };
 
 // Sincronizar inicialmente (al iniciar la app)
-
-// En syncServices.js, modificar initialSync
 export const initialSync = async () => {
   try {
     // Cargar notas del backend
@@ -141,23 +209,12 @@ export const initialSync = async () => {
     
     // Cargar notas locales
     const localNotes = await loadNotesFromCache();
+    const idCodeMap = await getIdCodeMap();
     
-    // Filtrar notas locales que no están sincronizadas
-    const unsyncedLocalNotes = localNotes.filter(note => !note.synced);
+    // Combinar notas
+    const mergedNotes = mergeNotes(backendNotes, localNotes, idCodeMap);
     
-    // Si no hay notas no sincronizadas, usar las del backend
-    if (unsyncedLocalNotes.length === 0) {
-      await saveNotesToCache(backendNotes);
-      return backendNotes;
-    }
-    
-    // Si hay notas no sincronizadas, mantenerlas junto con las del backend
-    const backendNoteIds = new Set(backendNotes.map(note => note.id));
-    const notesToKeep = unsyncedLocalNotes.filter(note => !backendNoteIds.has(note.id));
-    
-    const mergedNotes = [...backendNotes, ...notesToKeep];
     await saveNotesToCache(mergedNotes);
-    
     return mergedNotes;
     
   } catch (error) {
@@ -166,26 +223,26 @@ export const initialSync = async () => {
   }
 };
 
-// En syncServices.js, agregar esta función
-const mergeNotes = (backendNotes, localNotes) => {
+// Función para combinar notas
+const mergeNotes = (backendNotes, localNotes, idCodeMap) => {
   const backendNoteMap = new Map();
-  backendNotes.forEach(note => backendNoteMap.set(note.id, note));
+  
+  // Mapear notas del backend por idCode si existe, o por id
+  backendNotes.forEach(note => {
+    const key = note.idCode || note.id;
+    backendNoteMap.set(key, note);
+  });
   
   const mergedNotes = [...backendNotes];
   
-  // Agregar solo notas locales que no están en el backend o no están sincronizadas
+  // Agregar notas locales que no están en el backend
   localNotes.forEach(localNote => {
-    const backendNote = backendNoteMap.get(localNote.id);
+    const localKey = localNote.idCode || localNote.id;
+    const backendNote = backendNoteMap.get(localKey);
     
-    if (!backendNote) {
-      // Nota local que no existe en backend
+    if (!backendNote && !localNote.synced) {
+      // Nota local que no existe en backend y no está sincronizada
       mergedNotes.push(localNote);
-    } else if (!localNote.synced) {
-      // Nota local no sincronizada, reemplazar la del backend
-      const index = mergedNotes.findIndex(n => n.id === localNote.id);
-      if (index !== -1) {
-        mergedNotes[index] = localNote;
-      }
     }
   });
   

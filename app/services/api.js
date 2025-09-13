@@ -41,11 +41,12 @@ export const notesApi = {
     getById: (id) => api.get(`/notes/${id}`),
     // En tu función create de notesApi
 create: (noteData) => {
+    console.log('Creating note with data:', noteData);
   const formData = new FormData();
   
   // Asegúrate de que todos los campos sean strings
-  formData.append('title', noteData.title.toString());
-  formData.append('details', noteData.details?.toString() || '');
+  formData.append('title', noteData.title);
+  formData.append('details', noteData.details);
   
   // Para imágenes
   if (noteData.images) {

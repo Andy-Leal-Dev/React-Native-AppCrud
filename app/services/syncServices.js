@@ -8,7 +8,7 @@ const ID_CODE_MAP_KEY = '@id_code_map';
 
 // Función para generar ID único
 export const generateUniqueId = () => {
-  return Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+  return Math.floor(Math.random() * 1e12);
 };
 
 // Guardar mapeo de ID local a ID del backend
@@ -101,15 +101,15 @@ export const syncNotesWithBackend = async () => {
     
     for (const item of queue) {
       try {
-        // Preparar FormData para enviar archivos
+        console.log('Syncing note:', item.note, 'Action:', item.action);
         const formData = new FormData();
         
-        formData.append('title', item.note.title.toString());
-        formData.append('details', item.note.details?.toString() || '');
+        formData.append('title', item.note.title);
+        formData.append('details', item.note.details );
         
         // Incluir idCode si existe
         if (item.note.idCode) {
-          formData.append('idCode', item.note.idCode.toString());
+          formData.append('idCode', item.note.idCode);
         }
         
         // Agregar imágenes si existen
@@ -178,7 +178,10 @@ export const syncNotesWithBackend = async () => {
         
         results.push({ success: true, result });
       } catch (error) {
-        console.log('Sync error for note:', item.note.id, error.response?.data || error.message);
+        const noteId = item.note && (item.note.id !== undefined ? item.note.id : (item.note.idCode !== undefined ? item.note.idCode : 'unknown'));
+        console.log('Sync error for note:', noteId, error.response?.data || error.message);
+ 
+        
         results.push({ success: false, error });
       }
     }

@@ -27,7 +27,7 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AddNoteBottomSheet from '../../components/addNoteBottomSheet';
 import NoteDetailBottomSheet from '../../components/noteDetailBottomSheet';
-import {loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
+import {getIdCodeMap, generateUniqueId,loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
 import { authApi } from "../../services/api";
 
 // Directorio para guardar archivos
@@ -115,7 +115,7 @@ export default function HomeScreen() {
     initialApp();
   }, []);
 
-// En home.js, reemplazar la función syncPendingNotes
+
 // En home.js, mejorar syncPendingNotes
 const syncPendingNotes = async () => {
   try {

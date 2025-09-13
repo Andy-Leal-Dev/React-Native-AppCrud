@@ -64,35 +64,32 @@ export const syncNotesWithBackend = async () => {
     
     for (const item of queue) {
       try {
+        // Limpia los datos antes de enviar
+        const cleanNote = {
+          title: item.note.title,
+          details: item.note.details || '',
+          // No enviar propiedades innecesarias
+        };
+
         let result;
         
         switch (item.action) {
           case 'create':
-            result = await notesApi.create(item.note);
+            result = await notesApi.create(cleanNote);
             break;
           case 'update':
-            result = await notesApi.update(item.note.id, item.note);
+            result = await notesApi.update(item.note.id, cleanNote);
             break;
           case 'delete':
             result = await notesApi.delete(item.note.id);
             break;
-          default:
-            console.warn('Unknown action in sync queue:', item.action);
-            continue;
         }
         
         results.push({ success: true, result });
       } catch (error) {
-        console.log(`Error syncing note ${item.note.id}:`, error['error'] || error);
+        console.log('Sync error for note:', item.note.id, error.response?.data || error.message);
         results.push({ success: false, error });
-        // Si falla, mantenemos el item en la cola para reintentar luego
-        continue;
       }
-    }
-    
-    // Si todas las operaciones fueron exitosas, limpiamos la cola
-    if (results.every(r => r.success)) {
-      await clearSyncQueue();
     }
     
     return results;

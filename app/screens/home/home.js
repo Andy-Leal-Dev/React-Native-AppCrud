@@ -167,7 +167,26 @@ const syncPendingNotes = async () => {
     console.log('handleSheetChanges', index);
   }, []);
   const handleAddNote = async () => {
-    if (!newTitle.trim()) return;
+     if (!newTitle.trim()) return;
+
+  // Limpiar datos
+  const cleanNote = {
+    title: newTitle.trim(),
+    details: newDetails.trim() || '',
+    images: images.map(img => ({
+      uri: img.uri,
+      fileName: img.fileName,
+      fileSize: img.fileSize,
+      type: 'image/jpeg' // Asegurar type
+    })),
+    videos: videos.map(vid => ({
+      uri: vid.uri,
+      fileName: vid.fileName,
+      fileSize: vid.fileSize,
+      type: 'video/mp4' // Asegurar type
+    }))
+  };
+
 
     if (!user) {
       // Solo local

@@ -39,35 +39,42 @@ export const authApi ={
 export const notesApi = {
     getAll: () => api.get("/notes"),
     getById: (id) => api.get(`/notes/${id}`),
-    create:(noteData)=>{
-        const formData = new FormData();
-        formData.append('title', noteData.title);
-        formData.append('details', noteData.details);
-        if (noteData.images) {
-            noteData.images.forEach((image, index) => {
-                formData.append('images', {
-                    uri: image.uri,
-                    type: image.type,
-                    name: image.fileName || `image_${index}.jpg`,
-                });
-            });
-        }
-        if (noteData.videos) {
-            noteData.videos.forEach((video, index) => {
-                formData.append('videos', {
-                    uri: video.uri,
-                    type: video.type,
-                    name: video.fileName || `video_${index}.mp4`,
-                });
-            });
-        }
-        return api.post("/notes", formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-    }
-    ,
+    // En tu función create de notesApi
+create: (noteData) => {
+  const formData = new FormData();
+  
+  // Asegúrate de que todos los campos sean strings
+  formData.append('title', noteData.title.toString());
+  formData.append('details', noteData.details?.toString() || '');
+  
+  // Para imágenes
+  if (noteData.images) {
+    noteData.images.forEach((image, index) => {
+      formData.append('images', {
+        uri: image.uri,
+        type: image.type || 'image/jpeg', // Asegurar type
+        name: image.fileName || `image_${index}.jpg`,
+      });
+    });
+  }
+  
+  // Para videos
+  if (noteData.videos) {
+    noteData.videos.forEach((video, index) => {
+      formData.append('videos', {
+        uri: video.uri,
+        type: video.type || 'video/mp4', // Asegurar type
+        name: video.fileName || `video_${index}.mp4`,
+      });
+    });
+  }
+  
+  return api.post("/notes", formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+},
     update: (id, noteData) => {
         const formData = new FormData();
         formData.append('title', noteData.title);

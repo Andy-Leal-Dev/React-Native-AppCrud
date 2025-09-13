@@ -2,7 +2,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 import ProfileScreen from './profile';
 import LoginScreen from '../login';
 import RegisterScreen from '../signup';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 const Stack = createStackNavigator();
 
 const StackNavigator = () => {

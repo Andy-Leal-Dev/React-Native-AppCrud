@@ -83,7 +83,7 @@ export const syncNotesWithBackend = async () => {
         
         results.push({ success: true, result });
       } catch (error) {
-        console.error(`Error syncing note ${item.note.id}:`, error);
+        console.log(`Error syncing note ${item.note.id}:`, error['error'] || error);
         results.push({ success: false, error });
         // Si falla, mantenemos el item en la cola para reintentar luego
         continue;
@@ -127,6 +127,7 @@ export const initialSync = async () => {
     await saveNotesToCache(mergedNotes);
     return mergedNotes;
   } catch (error) {
+
     console.error('Initial sync failed, using cached notes:', error);
     // Si falla, usamos las notas en cache
     return await loadNotesFromCache();

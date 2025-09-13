@@ -27,7 +27,7 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AddNoteBottomSheet from '../../components/addNoteBottomSheet';
 import NoteDetailBottomSheet from '../../components/noteDetailBottomSheet';
-import { loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
+import {loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
 import { authApi } from "../../services/api";
 
 // Directorio para guardar archivos

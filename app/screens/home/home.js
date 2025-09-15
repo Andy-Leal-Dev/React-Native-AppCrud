@@ -18,6 +18,8 @@ import {
   BottomSheetModalProvider,
 
 } from '@gorhom/bottom-sheet';
+import { useAuth } from '../../providers/AuthContext';
+import { useSync } from '../../providers/SyncContext';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -74,24 +76,24 @@ export default function HomeScreen() {
   const [images, setImages] = useState([]);
   const [videos, setVideos] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
-
+const { user } = useAuth();
+  const { performSync, isSyncing, pendingSyncCount, loadSyncStatus } = useSync();
+  
   const [searchQuery, setSearchQuery] = useState(''); // Estado para la búsqueda
 
   // Estado para notas
   const [notes, setNotes] = useState([]);
   const [filteredNotes, setFilteredNotes] = useState([]); // Notas filtradas
 
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [user, setUser] = useState(null);
+
 
   // Cargar notas al iniciar
    useEffect(() => {
     const initialApp = async () => {
       try {
-        const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          setUser(JSON.parse(userData));
-          console.log('User data loaded:', JSON.parse(userData));
+   
+        if (user) {
+  
           const notes = await initialSync();
           setNotes(notes);
           setFilteredNotes(notes);
@@ -108,61 +110,30 @@ export default function HomeScreen() {
         setFilteredNotes(cachedNotes);
       }
     };
+    if(user && pendingSyncCount > 0){
+      syncPendingNotes();
+    }
     initialApp();
   }, []);
 
 
 // En home.js, mejorar syncPendingNotes
-const syncPendingNotes = async () => {
-  try {
-    setIsSyncing(true);
+ const syncPendingNotes = async () => {
+    const result = await performSync();
     
-    // Primero sincronizar la cola
-    const syncResults = await syncNotesWithBackend();
-    
-    // Si la sincronización fue exitosa, limpiar la cola
-    const hasSuccess = syncResults.some(result => result.success);
-    if (hasSuccess) {
-      await clearSyncQueue();
+    if (result.success) {
+      // Recargar las notas después de la sincronización exitosa
+      const cachedNotes = await loadNotesFromCache();
+      setNotes(cachedNotes);
+      setFilteredNotes(cachedNotes);
+    } else {
+      console.error('Sync failed:', result.error);
+      // Mantener las notas locales actuales
+      const cachedNotes = await loadNotesFromCache();
+      setNotes(cachedNotes);
+      setFilteredNotes(cachedNotes);
     }
-    
-    // Luego cargar todas las notas del backend
-    const backendNotes = await loadNotesFromBackend();
-  
-    
-    // Combinar con notas locales no sincronizadas
-    const localNotes = await loadNotesFromCache();
-    const unsyncedNotes = localNotes.filter(note => !note.synced);
-    
-    const mergedNotes = [...backendNotes];
-    
-    // Agregar notas locales no sincronizadas que no están en el backend
-    unsyncedNotes.forEach(localNote => {
-      const localKey = localNote.idCode || localNote.id;
-      const existsInBackend = backendNotes.some(backendNote => 
-        (backendNote.idCode || backendNote.id) === localKey
-      );
-      
-      if (!existsInBackend) {
-        mergedNotes.push(localNote);
-      }
-    });
-    
-    // Guardar solo las notas combinadas en caché
-    await saveNotesToCache(mergedNotes);
-    setNotes(mergedNotes);
-    setFilteredNotes(mergedNotes);
-
-  } catch (error) {
-    console.error('Error syncing notes:', error);
-    // En caso de error, mantener las notas locales
-    const cachedNotes = await loadNotesFromCache();
-    setNotes(cachedNotes);
-    setFilteredNotes(cachedNotes);
-  } finally {
-    setIsSyncing(false);
-  }
-}
+  };
   // Agregar botón de sincronización manual
 
   useEffect(() => {
@@ -195,12 +166,12 @@ const syncPendingNotes = async () => {
   }, []);
   // En home.js, mejorar handleAddNote
 // En home.js, mejorar handleAddNote
-const handleAddNote = async () => {
-  if (!newTitle.trim()) return;
+  const handleAddNote = async () => {
+    if (!newTitle.trim()) return;
 
-  const newNoteId = generateUniqueId();
-  const idCode = generateUniqueId(); // Generar idCode único
-  
+    const newNoteId = generateUniqueId();
+    const idCode = generateUniqueId();
+    
   // Copiar archivos al directorio de notas si el usuario está logueado
   let finalImages = images;
   let finalVideos = videos;
@@ -238,34 +209,32 @@ const handleAddNote = async () => {
   }
 
   const newNote = {
-    id: newNoteId,
-    idCode: idCode, // Incluir idCode para sincronización
-    title: newTitle.trim(),
-    details: newDetails.trim() || '',
-    date: new Date().toLocaleDateString('es-ES'),
-    timestamp: Date.now(),
-    images: finalImages,
-    videos: finalVideos,
-    synced: !user // Si no hay usuario, no está sincronizada
-  };
+      id: newNoteId,
+      idCode: idCode,
+      title: newTitle.trim(),
+      details: newDetails.trim() || '',
+      date: new Date().toLocaleDateString('es-ES'),
+      timestamp: Date.now(),
+      images: finalImages,
+      videos: finalVideos,
+      synced: !user // Si no hay usuario, no está sincronizada
+    };
 
-  const updatedNotes = [...notes, newNote];
-  setNotes(updatedNotes);
-  setFilteredNotes(updatedNotes);
-  await saveNotesToCache(updatedNotes);
+    const updatedNotes = [...notes, newNote];
+    setNotes(updatedNotes);
+    setFilteredNotes(updatedNotes);
+    await saveNotesToCache(updatedNotes);
 
   // Si hay usuario, sincronizar inmediatamente
-  if (user) {
-    await addToSyncQueue(newNote, 'create');
-    syncPendingNotes();
-  }
-
-  // Limpiar estado
-  setNewTitle('');
-  setNewDetails('');
-  setImages([]);
-  setVideos([]);
-  addNoteSheetRef.current?.close();
+      await addToSyncQueue(newNote, 'create');
+      // Actualizar el contador de sincronización pendiente
+      await loadSyncStatus();
+    // Limpiar estado
+    setNewTitle('');
+    setNewDetails('');
+    setImages([]);
+    setVideos([]);
+    addNoteSheetRef.current?.close();
 };
   // Función para eliminar nota
   const handleDeleteNote = async (noteId) => {

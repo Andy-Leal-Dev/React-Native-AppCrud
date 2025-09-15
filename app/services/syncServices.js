@@ -146,6 +146,7 @@ export const syncNotesWithBackend = async () => {
         switch (item.action) {
           case 'create':
             result = await notesApi.create(formData);
+            console,log('Create result:', result);
             backendId = result.data.id;
             // Guardar mapeo de ID local a ID del backend
             if (item.note.idCode && backendId) {
@@ -175,17 +176,17 @@ export const syncNotesWithBackend = async () => {
             }
             break;
         }
-        
+        console.log('Sync successful for note:', item.note, 'Result:', result?.data);
         results.push({ success: true, result });
       } catch (error) {
+        
         const noteId = item.note && (item.note.id !== undefined ? item.note.id : (item.note.idCode !== undefined ? item.note.idCode : 'unknown'));
         console.log('Sync error for note:', noteId, error.response?.data || error.message);
  
-        
         results.push({ success: false, error });
       }
     }
-    
+    console.log('Sync results:', results);
     return results;
   } catch (error) {
     console.error('Error in sync process:', error);

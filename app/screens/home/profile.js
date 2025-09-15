@@ -7,33 +7,16 @@ import { useEffect, useState } from "react";
 const NOTES_CACHE_KEY = '@notes_cache';
 const SYNC_QUEUE_KEY = '@sync_queue';
 const ID_CODE_MAP_KEY = '@id_code_map';
-
+import { useAuth } from '../../providers/AuthContext';
 export default function ProfileScreen({ navigation }) {
-    const [user, setUser] = useState(null);
+ const { user, logout } = useAuth()
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
 
-  const loadUserData = async () => {
-    try {
-      const userData = await AsyncStorage.getItem('userData');
-      if (userData) {
-        setUser(JSON.parse(userData));
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    }
-  };
 
   const handleLogout = async () => {
-    try {
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userData');
-
+    const result = await logout();
+    if (result.success) {
       navigation.replace('Login');
-    } catch (error) {
-      console.error('Error logging out:', error);
     }
   };
 

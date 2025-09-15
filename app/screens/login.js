@@ -5,8 +5,9 @@ import { ScrollView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
 import { authApi } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function LoginScreen({ navigation }) {
-   const [email, setEmail] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -33,7 +34,6 @@ export default function LoginScreen({ navigation }) {
             setLoading(false);
         }
     };
-
     return (
         
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

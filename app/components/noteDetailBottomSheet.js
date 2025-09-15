@@ -1,17 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
   StyleSheet,
+  Modal,
+  Pressable,
 } from "react-native";
 import {
   BottomSheetModal,
   BottomSheetView,
   BottomSheetScrollView
 } from '@gorhom/bottom-sheet';
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons, Ionicons } from "@expo/vector-icons";
+import { Video } from 'expo-av';
 
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['60%'],
@@ -21,70 +24,139 @@ const NoteDetailBottomSheet = React.forwardRef(({
   handleDeleteNote,
   timeAgo
 }, ref) => {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
+  const [mediaType, setMediaType] = useState('');
+
+  const openMediaViewer = (media, type) => {
+    setSelectedMedia(media);
+    setMediaType(type);
+    setModalVisible(true);
+  };
+
+  const closeMediaViewer = () => {
+    setModalVisible(false);
+    setSelectedMedia(null);
+    setMediaType('');
+  };
+
   return (
-    <BottomSheetModal
-      ref={ref}
-      onChange={onChange}
-      snapPoints={snapPoints}
-      enablePanDownToClose={enablePanDownToClose}
-    >
-      <BottomSheetView style={styles.contentContainerNote}>
-        <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%' }}>
-          {selectedNote ? (
-            <View style={styles.detailContainer}>
-              <Text style={styles.textTitleNote}>{selectedNote.title}</Text>
-              <Text style={{ marginBottom: 10 }}>{selectedNote.date || selectedNote.createdAt}</Text>
-              <Text style={styles.detailsText}>{selectedNote.details}</Text>
-              
-              {selectedNote.images && selectedNote.images.length > 0 && (
-                <View>
-                  <Text style={styles.mediaTitle}>Imágenes:</Text>
-                  {selectedNote.images.map((img, idx) => (
-                    <View key={idx} style={styles.preViewImage}>
-                      <Image source={{ uri: img.uri }} style={styles.image} />
-                      <View style={styles.mediaInfo}>
-                        <Text>{img.fileName}</Text>
-                        <Text>{(img.fileSize / 1024).toFixed(2)} KB</Text>
-                        <Text>{timeAgo(new Date(img.addedAt))} atrás</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
+    <>
+      <BottomSheetModal
+        ref={ref}
+        onChange={onChange}
+        snapPoints={snapPoints}
+        enablePanDownToClose={enablePanDownToClose}
+      >
+        <BottomSheetView style={styles.contentContainerNote}>
+          <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%' }}>
+            {selectedNote ? (
+              <View key={selectedNote.id} style={styles.detailContainer}>
+                <Text style={styles.textTitleNote}>{selectedNote.title}</Text>
+                <Text style={{ marginBottom: 10 }}>{selectedNote.date || selectedNote.createdAt}</Text>
+                <Text style={styles.detailsText}>{selectedNote.details}</Text>
+                
+                {selectedNote.media && selectedNote.media.length > 0 && (
+                  <View>
+                    <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
+                    {selectedNote.media.map((media, idx) => (
+                      <Pressable 
+                        key={idx} 
+                        style={styles.mediaItem}
+                        onPress={() => openMediaViewer(media, media.fileType)}
+                      >
+                        {media.fileType === 'image' ? (
+                          <>
+                            <Image 
+                              source={{ uri: 'https://majestic-jalebi-e13e1a.netlify.app/'+ media.filePath }} 
+                              style={styles.mediaThumbnail} 
+                            />
+                            <View style={styles.mediaInfo}>
+                              <Text style={styles.mediaName} numberOfLines={1}>{media.originalName || media.fileName}</Text>
+                              <Text style={styles.mediaSize}>{(media.fileSize / 1024).toFixed(2)} KB</Text>
+                            </View>
+                            <Ionicons name="eye-outline" size={24} color={COLORS.primary} />
+                          </>
+                        ) : (
+                          <>
+                            <View style={styles.videoThumb}>
+                              <MaterialIcons name="movie" size={30} color={COLORS.primary} />
+                            </View>
+                            <View style={styles.mediaInfo}>
+                              <Text style={styles.mediaName} numberOfLines={1}>{media.originalName || media.fileName}</Text>
+                              <Text style={styles.mediaSize}>{(media.fileSize / (1024 * 1024)).toFixed(2)} MB</Text>
+                            </View>
+                            <Ionicons name="eye-outline" size={24} color={COLORS.primary} />
+                          </>
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteNote(selectedNote.id)}
+                >
+                  <Text style={styles.deleteButtonText}>Eliminar Nota</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text>No hay nota seleccionada</Text>
+            )}
+          </BottomSheetScrollView>
+        </BottomSheetView>
+      </BottomSheetModal>
+
+      {/* Modal para visualización completa de medios */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeMediaViewer}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton}
+            onPress={closeMediaViewer}
+          >
+            <Ionicons name="close" size={30} color="white" />
+          </TouchableOpacity>
+          
+          {selectedMedia && (
+            <View style={styles.modalContent}>
+              {mediaType === 'image' ? (
+                <Image 
+                  source={{ uri: 'https://backend-noteeasy-appcrud.onrender.com/'+ selectedMedia.filePath }} 
+                  style={styles.fullMedia} 
+                  resizeMode="contain"
+                />
+              ) : (
+                <Video
+                  source={{ uri: 'https://backend-noteeasy-appcrud.onrender.com/'+ selectedMedia.filePath }}
+                  style={styles.fullMedia}
+                  useNativeControls
+                  resizeMode="contain"
+                  isLooping
+                />
               )}
               
-              {selectedNote.videos && selectedNote.videos.length > 0 && (
-                <View>
-                  <Text style={styles.mediaTitle}>Videos:</Text>
-                  {selectedNote.videos.map((vid, idx) => (
-                    <View key={idx} style={styles.preViewVideo}>
-                      <View style={styles.videoThumb}>
-                        <MaterialIcons name="movie" size={40} color="#2196F3" />
-                      </View>
-                      <View style={styles.mediaInfo}>
-                        <Text>{vid.fileName}</Text>
-                        <Text>{(vid.fileSize / (1024 * 1024)).toFixed(2)} MB</Text>
-                        <Text>{timeAgo(new Date(vid.addedAt))} atrás</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-              
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDeleteNote(selectedNote.id)}
-              >
-                <Text style={styles.deleteButtonText}>Eliminar Nota</Text>
-              </TouchableOpacity>
+              <View style={styles.mediaDetails}>
+                <Text style={styles.mediaDetailText}>{selectedMedia.originalName || selectedMedia.fileName}</Text>
+                <Text style={styles.mediaDetailText}>
+                  {mediaType === 'image' 
+                    ? `${(selectedMedia.fileSize / 1024).toFixed(2)} KB` 
+                    : `${(selectedMedia.fileSize / (1024 * 1024)).toFixed(2)} MB`}
+                </Text>
+              </View>
             </View>
-          ) : (
-            <Text>No hay nota seleccionada</Text>
           )}
-        </BottomSheetScrollView>
-      </BottomSheetView>
-    </BottomSheetModal>
+        </View>
+      </Modal>
+    </>
   );
 });
+
 const COLORS = {
   primary: "#2196F3",
   accent: "#449DD1",
@@ -98,7 +170,6 @@ const COLORS = {
 const styles = StyleSheet.create({
   contentContainerNote: {
     padding: 20,
-
     flex: 1,
     width: '100%',
     borderTopLeftRadius: 24,
@@ -121,51 +192,45 @@ const styles = StyleSheet.create({
   mediaTitle: {
     fontWeight: 'bold',
     marginBottom: 10,
+    fontSize: 16,
+    color: COLORS.primary,
   },
-  preViewImage: {
-    width: '100%',
-    height: 100,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  mediaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 5,
-    marginBottom: 8,
-  },
-  preViewVideo: {
-    width: '100%',
-    height: 100,
-    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 5,
+    borderRadius: 8,
     marginBottom: 8,
+    backgroundColor: COLORS.card,
   },
-  image: {
-    width: '20%',
-    height: '80%',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  mediaThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
     marginRight: 10,
-    resizeMode: 'stretch',
   },
   videoThumb: {
-    width: '20%',
-    height: '80%',
+    width: 50,
+    height: 50,
     backgroundColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 6,
     marginRight: 10,
   },
   mediaInfo: {
     flex: 1,
-    justifyContent: 'flex-start',
-    gap: 5,
+    marginRight: 10,
+  },
+  mediaName: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  mediaSize: {
+    fontSize: 12,
+    color: COLORS.muted,
   },
   deleteButton: {
     backgroundColor: '#f44336',
@@ -178,6 +243,41 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  // Estilos para el modal de visualización completa
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 5,
+  },
+  modalContent: {
+    width: '100%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullMedia: {
+    width: '100%',
+    height: '80%',
+  },
+  mediaDetails: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  mediaDetailText: {
+    color: 'white',
+    fontSize: 16,
+    marginBottom: 5,
   },
 });
 

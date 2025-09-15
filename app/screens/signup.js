@@ -18,7 +18,7 @@ export default function RegisterScreen({ navigation }) {
 
         setLoading(true);
         try {
-            const response = await authAPI.register({
+            const response = await authApi.register({
                 firstName,
                 lastName,
                 email,
@@ -53,16 +53,16 @@ export default function RegisterScreen({ navigation }) {
                 <TextInput
                     style={styles.input}
                     placeholder="Nombre "
-                    value={username}
-                    onChangeText={setUsername}
+                    value={firstName}
+                    onChangeText={setFirstName}
                     autoCapitalize="none"
                     placeholderTextColor="#aaa"
                 />
                 <TextInput
                     style={styles.input}
                     placeholder="Apellido"
-                    value={username}
-                    onChangeText={setUsername}
+                    value={lastName}
+                    onChangeText={setLastName}
                     autoCapitalize="none"
                     placeholderTextColor="#aaa"
                 />

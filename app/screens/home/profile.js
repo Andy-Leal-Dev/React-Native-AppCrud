@@ -4,6 +4,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { TouchableWithoutFeedback } from "@gorhom/bottom-sheet";
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useEffect, useState } from "react";
+const NOTES_CACHE_KEY = '@notes_cache';
+const SYNC_QUEUE_KEY = '@sync_queue';
+const ID_CODE_MAP_KEY = '@id_code_map';
 
 export default function ProfileScreen({ navigation }) {
     const [user, setUser] = useState(null);
@@ -27,6 +30,7 @@ export default function ProfileScreen({ navigation }) {
     try {
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userData');
+
       navigation.replace('Login');
     } catch (error) {
       console.error('Error logging out:', error);

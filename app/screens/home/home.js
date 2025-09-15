@@ -6,29 +6,25 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
+  Pressable
+
 } from "react-native";
 import Constants from 'expo-constants';
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import note from "../../jsons/notes.json";
+
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
-  BottomSheetModal,
-  BottomSheetView,
+
   BottomSheetModalProvider,
-  BottomSheetTextInput,
-  BottomSheetScrollView
+
 } from '@gorhom/bottom-sheet';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AddNoteBottomSheet from '../../components/addNoteBottomSheet';
 import NoteDetailBottomSheet from '../../components/noteDetailBottomSheet';
-import {getIdCodeMap, generateUniqueId,loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
-import { authApi } from "../../services/api";
+import {clearSyncQueue, generateUniqueId,loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
+
 
 // Directorio para guardar archivos
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
@@ -132,7 +128,7 @@ const syncPendingNotes = async () => {
     
     // Luego cargar todas las notas del backend
     const backendNotes = await loadNotesFromBackend();
-    const idCodeMap = await getIdCodeMap();
+  
     
     // Combinar con notas locales no sincronizadas
     const localNotes = await loadNotesFromCache();
@@ -319,7 +315,7 @@ const handleAddNote = async () => {
   // Selección de imágenes
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       allowsEditing: true,
       aspect: [4, 3],
@@ -341,7 +337,7 @@ const handleAddNote = async () => {
   // Selección de videos
   const pickVideo = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: ['videos'],
       allowsMultipleSelection: true,
       quality: 1,
     });
@@ -404,9 +400,10 @@ const handleAddNote = async () => {
                   Intenta con diferentes palabras clave o crea una nueva nota
                 </Text>
               </View>
-            ) : (
-              <View key={'0'} style={styles.containerCardNote}>
-                {filteredNotes.map((item) => (
+            ) : 
+             
+                filteredNotes.map((item) => (
+                   <View key={item.idCode} style={styles.containerCardNote}>
                   <Pressable
                     key={item.id ? item.id : `note-${Date.now()}-${Math.random()}`}
                     style={styles.cardNote}
@@ -422,7 +419,7 @@ const handleAddNote = async () => {
                         <Text style={styles.textTitleNote}>{item.title}</Text>
                       )}
 
-                      <Text style={styles.textCardNote}>{item.date}</Text>
+                      <Text style={styles.textCardNote}>{item.date || item.createdAt}</Text>
 
                       {/* Resaltar texto coincidente en los detalles */}
                       {searchQuery.trim() !== '' ? (
@@ -446,9 +443,10 @@ const handleAddNote = async () => {
                       <Text style={styles.textDetails}>Presiona para ver más detalles</Text>
                     </View>
                   </Pressable>
+                </View>
                 ))}
-              </View>
-            )}
+              
+            
             <Text style={{height:30}}/>
           </ScrollView>
           <TouchableOpacity style={styles.floatingButton} onPress={handlePresentAddNoteSheet}>

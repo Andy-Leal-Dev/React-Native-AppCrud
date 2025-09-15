@@ -41,36 +41,8 @@ export const notesApi = {
     getById: (id) => api.get(`/notes/${id}`),
     // En tu función create de notesApi
 create: (noteData) => {
-    console.log('Creating note with data:', noteData);
-  const formData = new FormData();
-  
-  // Asegúrate de que todos los campos sean strings
-  formData.append('title', noteData.title);
-  formData.append('details', noteData.details);
-  
-  // Para imágenes
-  if (noteData.images) {
-    noteData.images.forEach((image, index) => {
-      formData.append('images', {
-        uri: image.uri,
-        type: image.type || 'image/jpeg', // Asegurar type
-        name: image.fileName || `image_${index}.jpg`,
-      });
-    });
-  }
-  
-  // Para videos
-  if (noteData.videos) {
-    noteData.videos.forEach((video, index) => {
-      formData.append('videos', {
-        uri: video.uri,
-        type: video.type || 'video/mp4', // Asegurar type
-        name: video.fileName || `video_${index}.mp4`,
-      });
-    });
-  }
-  
-  return api.post("/notes", formData, {
+   
+  return api.post("/notes", noteData , {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -79,6 +51,7 @@ create: (noteData) => {
     update: (id, noteData) => {
         const formData = new FormData();
         formData.append('title', noteData.title);
+        formData.append('idCode', noteData.details);
         if (noteData.details) {
             formData.append('details', noteData.details);
         }

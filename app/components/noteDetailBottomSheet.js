@@ -35,7 +35,8 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDetails, setEditedDetails] = useState('');
   const { isAuthenticated } = useAuth();
-
+ const [deletedMediaIds, setDeletedMediaIds] = useState([]);
+  const [deletedLocalMedia, setDeletedLocalMedia] = useState([]);
   useEffect(() => {
     if (selectedNote) {
       setEditedTitle(selectedNote.title);
@@ -54,7 +55,22 @@ const NoteDetailBottomSheet = React.forwardRef(({
     setSelectedMedia(null);
     setMediaType('');
   };
-
+    const handleDeleteMedia = (mediaId, isLocal = false, mediaIndex, mediaType) => {
+    if (isLocal) {
+      // Para medios locales
+      const updatedNote = { ...selectedNote };
+      if (mediaType === 'image') {
+        updatedNote.images = updatedNote.images.filter((_, i) => i !== mediaIndex);
+      } else if (mediaType === 'video') {
+        updatedNote.videos = updatedNote.videos.filter((_, i) => i !== mediaIndex);
+      }
+      setSelectedNote(updatedNote);
+      setDeletedLocalMedia([...deletedLocalMedia, { mediaIndex, mediaType }]);
+    } else {
+      // Para medios del backend
+      setDeletedMediaIds([...deletedMediaIds, mediaId]);
+    }
+  };
   const handleSaveChanges = () => {
     if (!selectedNote) return;
     
@@ -64,44 +80,64 @@ const NoteDetailBottomSheet = React.forwardRef(({
       details: editedDetails
     };
     
+    // Aplicar eliminaciones de medios locales
+    deletedLocalMedia.forEach(({ mediaIndex, mediaType }) => {
+      if (mediaType === 'image' && updatedNote.images) {
+        updatedNote.images = updatedNote.images.filter((_, i) => i !== mediaIndex);
+      } else if (mediaType === 'video' && updatedNote.videos) {
+        updatedNote.videos = updatedNote.videos.filter((_, i) => i !== mediaIndex);
+      }
+    });
+
     if (isAuthenticated) {
-      handleUpdateNote(selectedNote.id, updatedNote);
+      // Para usuario autenticado, incluir IDs de medios a eliminar
+      handleUpdateNote(selectedNote.id, {
+        ...updatedNote,
+        deletedMediaIds: deletedMediaIds.length > 0 ? deletedMediaIds : undefined
+      });
       Alert.alert("Éxito", "Nota actualizada correctamente");
     } else {
+      // Para usuario no autenticado
       Alert.alert(
         "Cambios guardados localmente",
         "Los cambios se han guardado en tu dispositivo. Inicia sesión para sincronizarlos con la nube.",
         [{ text: "Entendido" }]
       );
-      // Guardar cambios localmente
       handleUpdateNote(selectedNote.id, updatedNote);
     }
     
+    // Resetear estados de eliminación
+    setDeletedMediaIds([]);
+    setDeletedLocalMedia([]);
     setIsEditing(false);
   };
 
   const handleCancelEdit = () => {
     setEditedTitle(selectedNote.title);
     setEditedDetails(selectedNote.details || '');
+    setDeletedMediaIds([]);
+    setDeletedLocalMedia([]);
     setIsEditing(false);
   };
 
-  const renderMediaItem = (media, idx, type) => {
+  // Modificar la función renderMediaItem para incluir botón de eliminar
+  const renderMediaItem = (media, idx, type, isLocal = false) => {
     // Determinar si el archivo es local o remoto
-    const isLocal = media.uri && !media.uri.startsWith('http');
-    const sourceUri = isLocal ? media.uri : 'https://backend-noteeasy-appcrud.onrender.com/' + (media.filePath || '');
+    const isLocalMedia = isLocal || (media.uri && !media.uri.startsWith('http'));
+    const sourceUri = isLocalMedia ? media.uri : 'https://backend-noteeasy-appcrud.onrender.com/' + (media.filePath || '');
+    const mediaId = media.id || `local-${idx}-${type}`;
     
     return (
       <Pressable 
-        key={idx} 
+        key={mediaId} 
         style={styles.mediaItem}
-        onPress={() => openMediaViewer(media, type)}
       >
         {type === 'image' ? (
           <>
             <Image 
               source={{ uri: sourceUri }} 
               style={styles.mediaThumbnail} 
+              onPress={() => openMediaViewer(media, type)}
             />
             <View style={styles.mediaInfo}>
               <Text style={styles.mediaName} numberOfLines={1}>{media.originalName || media.fileName || 'Imagen'}</Text>
@@ -112,11 +148,31 @@ const NoteDetailBottomSheet = React.forwardRef(({
                     `${(media.fileSize / (1024 * 1024)).toFixed(2)} MB`
                 ) : 'Tamaño desconocido'}
               </Text>
-              {isLocal && (
+              {isLocalMedia && (
                 <Text style={styles.localBadge}>Local</Text>
               )}
             </View>
-            <Ionicons name="eye-outline" size={24} color={COLORS.primary} />
+            <Ionicons 
+              name="eye-outline" 
+              size={24} 
+              color={COLORS.primary} 
+              onPress={() => openMediaViewer(media, type)}
+              style={styles.mediaActionIcon}
+            />
+            {isEditing && (
+              <Ionicons 
+                name="trash-outline" 
+                size={24} 
+                color="#f44336" 
+                onPress={() => handleDeleteMedia(
+                  media.id, 
+                  isLocalMedia, 
+                  idx, 
+                  type
+                )}
+                style={styles.mediaActionIcon}
+              />
+            )}
           </>
         ) : (
           <>
@@ -132,17 +188,37 @@ const NoteDetailBottomSheet = React.forwardRef(({
                     `${(media.fileSize / (1024 * 1024)).toFixed(2)} MB`
                 ) : 'Tamaño desconocido'}
               </Text>
-              {isLocal && (
+              {isLocalMedia && (
                 <Text style={styles.localBadge}>Local</Text>
               )}
             </View>
-            <Ionicons name="eye-outline" size={24} color={COLORS.primary} />
+            <Ionicons 
+              name="eye-outline" 
+              size={24} 
+              color={COLORS.primary} 
+              onPress={() => openMediaViewer(media, type)}
+              style={styles.mediaActionIcon}
+            />
+            {isEditing && (
+              <Ionicons 
+                name="trash-outline" 
+                size={24} 
+                color="#f44336" 
+                onPress={() => handleDeleteMedia(
+                  media.id, 
+                  isLocalMedia, 
+                  idx, 
+                  type
+                )}
+                style={styles.mediaActionIcon}
+              />
+            )}
           </>
         )}
       </Pressable>
     );
   };
-
+  
   return (
     <>
       <BottomSheetModal
@@ -181,30 +257,37 @@ const NoteDetailBottomSheet = React.forwardRef(({
                   </>
                 )}
                 
-                {(selectedNote.media && selectedNote.media.length > 0) || 
-                 (selectedNote.images && selectedNote.images.length > 0) || 
-                 (selectedNote.videos && selectedNote.videos.length > 0) ? (
-                  <View>
-                    <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
-                    
-                    {/* Mostrar imágenes */}
-                    {selectedNote.images && selectedNote.images.map((media, idx) => 
-                      renderMediaItem(media, idx, 'image')
-                    )}
-                    
-                    {/* Mostrar videos */}
-                    {selectedNote.videos && selectedNote.videos.map((media, idx) => 
-                      renderMediaItem(media, idx, 'video')
-                    )}
-                    
-                    {/* Mostrar medios del backend */}
-                    {selectedNote.media && selectedNote.media.map((media, idx) => 
-                      media.fileType === 'image' ? 
-                        renderMediaItem(media, idx, 'image') : 
-                        renderMediaItem(media, idx, 'video')
-                    )}
-                  </View>
-                ) : null}
+                  {(selectedNote.media && selectedNote.media.length > 0) || 
+   (selectedNote.images && selectedNote.images.length > 0) || 
+   (selectedNote.videos && selectedNote.videos.length > 0) ? (
+    <View>
+      <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
+      
+      {/* Mostrar imágenes del backend */}
+      {selectedNote.media && selectedNote.media
+        .filter(media => media.fileType === 'image')
+        .map((media, idx) => 
+          renderMediaItem(media, idx, 'image', false)
+        )}
+      
+      {/* Mostrar videos del backend */}
+      {selectedNote.media && selectedNote.media
+        .filter(media => media.fileType === 'video')
+        .map((media, idx) => 
+          renderMediaItem(media, idx, 'video', false)
+        )}
+      
+      {/* Mostrar imágenes locales */}
+      {selectedNote.images && selectedNote.images.map((media, idx) => 
+        renderMediaItem(media, idx, 'image', true)
+      )}
+      
+      {/* Mostrar videos locales */}
+      {selectedNote.videos && selectedNote.videos.map((media, idx) => 
+        renderMediaItem(media, idx, 'video', true)
+      )}
+    </View>
+  ) : null}
                 
                 <View style={styles.buttonRow}>
                   {isEditing ? (
@@ -326,6 +409,10 @@ const styles = StyleSheet.create({
     width: '100%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+  },
+   mediaActionIcon: {
+    padding: 5,
+    marginLeft: 5,
   },
   detailContainer: {
     width: '100%',

@@ -106,6 +106,21 @@ export const syncNotesWithBackend = async () => {
       for (const item of queue) {
         try {
           console.log('Syncing note:', item.note.idCode, 'Action:', item.action);
+
+                  
+        if (item.action === 'update' && item.note.deletedMediaIds && item.note.deletedMediaIds.length > 0) {
+          // Primero eliminar los medios marcados para eliminación
+          for (const mediaId of item.note.deletedMediaIds) {
+            try {
+              await notesApi.deleteMedia(mediaId);
+              console.log('Media deleted successfully:', mediaId);
+            } catch (error) {
+              console.error('Error deleting media:', mediaId, error);
+              // Continuar con otros medios aunque falle uno
+            }
+          }
+        }
+
           const formData = new FormData();
           
           formData.append('title', item.note.title);
@@ -114,6 +129,10 @@ export const syncNotesWithBackend = async () => {
           if (item.note.idCode) {
             formData.append('idCode', item.note.idCode);
           }
+
+           if (item.action === 'update' && item.note.deletedMediaIds && item.note.deletedMediaIds.length > 0) {
+          formData.append('deletedMediaIds', item.note.deletedMediaIds.join(','));
+        }
           
           // Agregar imágenes y videos
           if (item.note.images && item.note.images.length > 0) {

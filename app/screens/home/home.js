@@ -229,44 +229,10 @@ const { user, isAuthenticated } = useAuth();
     setVideos([]);
     addNoteSheetRef.current?.close();
 };
-  // Función para eliminar nota
-  const handleDeleteNote = async (noteId) => {
-    const noteToDelete = notes.find(note => note.id === noteId);
-
-    if (!user) {
-      // Solo local
-      if (noteToDelete.synced) {
-        await addToSyncQueue(noteToDelete, 'delete');
-      }
-      const updatedNotes = notes.filter(note => note.id !== noteId);
-      setNotes(updatedNotes);
-      setFilteredNotes(updatedNotes);
-      await saveNotesToCache(updatedNotes);
-      detailSheetRef.current?.close();
-      syncPendingNotes();
-    } else {
-      // Usuario logueado: eliminar archivos asociados
-      if (noteToDelete.images) {
-        for (const img of noteToDelete.images) {
-          await deleteFile(img.uri);
-        }
-      }
-      if (noteToDelete.videos) {
-        for (const vid of noteToDelete.videos) {
-          await deleteFile(vid.uri);
-        }
-      }
-      const updatedNotes = notes.filter(note => note.id !== noteId);
-      setNotes(updatedNotes);
-      setFilteredNotes(updatedNotes);
-      await saveNotesToCache(updatedNotes);
-      detailSheetRef.current?.close();
-    }
-  };
-  const handleUpdateNote = async (noteId, updatedNote) => {
+const handleUpdateNote = async (noteId, updatedNoteData) => {
   try {
     const updatedNotes = notes.map(note => 
-      note.id === noteId ? { ...note, ...updatedNote } : note
+      note.id === noteId ? { ...note, ...updatedNoteData } : note
     );
     
     setNotes(updatedNotes);
@@ -275,24 +241,59 @@ const { user, isAuthenticated } = useAuth();
     
     // Si el usuario está autenticado, agregar a la cola de sincronización
     if (user && isAuthenticated) {
-      await addToSyncQueue(updatedNote, 'update');
+      // Preparar datos para sincronización
+      const syncData = {
+        ...updatedNoteData,
+        // Incluir información de medios eliminados si existe
+        deletedMediaIds: updatedNoteData.deletedMediaIds || []
+      };
+      
+      await addToSyncQueue(syncData, 'update');
       await loadSyncStatus();
+      
+      // Si hay medios eliminados, sincronizar inmediatamente
+      if (updatedNoteData.deletedMediaIds && updatedNoteData.deletedMediaIds.length > 0) {
+        await syncPendingNotes();
+      }
     }
   } catch (error) {
     console.error('Error updating note:', error);
   }
 };
 
-
   // Eliminar archivo
-  const deleteFile = async (fileUri) => {
-    try {
-      await FileSystem.deleteAsync(fileUri);
-    } catch (error) {
-      console.error('Error deleting file:', error);
-    }
-  };
+ const handleDeleteNote = async (noteId) => {
+  const noteToDelete = notes.find(note => note.id === noteId);
 
+  if (!noteToDelete) return;
+
+  // Eliminar archivos asociados
+  if (noteToDelete.images) {
+    for (const img of noteToDelete.images) {
+      await deleteFile(img.uri);
+    }
+  }
+  if (noteToDelete.videos) {
+    for (const vid of noteToDelete.videos) {
+      await deleteFile(vid.uri);
+    }
+  }
+
+  const updatedNotes = notes.filter(note => note.id !== noteId);
+  setNotes(updatedNotes);
+  setFilteredNotes(updatedNotes);
+  await saveNotesToCache(updatedNotes);
+  
+  // Si hay usuario autenticado y la nota estaba sincronizada, agregar a cola de eliminación
+  if (user && isAuthenticated && noteToDelete.synced) {
+    await addToSyncQueue(noteToDelete, 'delete');
+    await loadSyncStatus();
+    // Sincronizar inmediatamente la eliminación
+    await syncPendingNotes();
+  }
+  
+  detailSheetRef.current?.close();
+};
 
   // Selección de imágenes
   const pickImage = async () => {

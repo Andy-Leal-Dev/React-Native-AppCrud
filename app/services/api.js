@@ -84,6 +84,7 @@ create: (noteData) => {
         });
     },
     delete: (id) => api.delete(`/notes/${id}`),
+    
     deleteMedia: (mediaId) => api.delete(`/notes/media/${mediaId}`),
 }
 

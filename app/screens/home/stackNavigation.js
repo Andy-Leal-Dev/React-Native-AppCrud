@@ -7,11 +7,8 @@ import { useAuth } from '../../providers/AuthContext';
 const Stack = createStackNavigator();
 
 const StackNavigator = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
 
-  if (isLoading) {
-    return null; // o un componente de carga
-  }
 
   return (
     <Stack.Navigator>

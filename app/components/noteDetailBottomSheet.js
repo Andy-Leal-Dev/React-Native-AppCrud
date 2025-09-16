@@ -66,7 +66,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
       } else if (mediaType === 'video') {
         updatedNote.videos = updatedNote.videos.filter((_, i) => i !== mediaIndex);
       }
-      setSelectedNote(updatedNote);
+      selectedNote(updatedNote);
       setDeletedLocalMedia([...deletedLocalMedia, { mediaIndex, mediaType }]);
     } else {
       // Para medios del backend
@@ -265,15 +265,13 @@ const NoteDetailBottomSheet = React.forwardRef(({
                   (selectedNote.videos && selectedNote.videos.length > 0) ? (
                   <View>
                     <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
-                    
-                    {/* Mostrar imágenes del backend */}
+                   
                     {selectedNote.media && selectedNote.media
                       .filter(media => media.fileType === 'image')
                       .map((media, idx) => 
                         renderMediaItem(media, idx, 'image', false)
                       )}
-                    
-                    {/* Mostrar videos del backend */}
+              
                     {selectedNote.media && selectedNote.media
                       .filter(media => media.fileType === 'video')
                       .map((media, idx) => 

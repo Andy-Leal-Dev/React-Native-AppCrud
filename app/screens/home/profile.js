@@ -1,12 +1,7 @@
 import { View, Text, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView } from "react-native";
 import Constants from 'expo-constants';
 import { MaterialIcons } from '@expo/vector-icons';
-import { TouchableWithoutFeedback } from "@gorhom/bottom-sheet";
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useEffect, useState } from "react";
-const NOTES_CACHE_KEY = '@notes_cache';
-const SYNC_QUEUE_KEY = '@sync_queue';
-const ID_CODE_MAP_KEY = '@id_code_map';
+
 import { useAuth } from '../../providers/AuthContext';
 export default function ProfileScreen({ navigation }) {
  const { user, logout } = useAuth()
@@ -14,15 +9,16 @@ export default function ProfileScreen({ navigation }) {
 
 
   const handleLogout = async () => {
-   await logout();
-   
+    const result = await logout();
+    if (result.success) {
+     navigation.navigate('Home');
+    }
   };
-
-  const handleLogin = () => {
-    navigation.navigate('Login');
-  };
-
-
+if (!user) {
+  return(
+    <></>
+  );
+}
 
 return (
     <View style={styles.container}>

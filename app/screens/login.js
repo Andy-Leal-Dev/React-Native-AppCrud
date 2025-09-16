@@ -27,7 +27,8 @@ export default function LoginScreen({ navigation }) {
             await AsyncStorage.setItem('userToken', response.data.token);
             await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
             await checkAuthStatus();
-        
+            // Navegar a la pantalla principal
+            navigation.navigate('Home');    
         } catch (error) {
             console.error('Login error:', error);
             Alert.alert('Error', error.response?.data?.error || 'Error al iniciar sesión');

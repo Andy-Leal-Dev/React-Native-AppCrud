@@ -231,33 +231,73 @@ const { user, isAuthenticated } = useAuth();
 };
 const handleUpdateNote = async (noteId, updatedNoteData) => {
   try {
-    const updatedNotes = notes.map(note => 
-      note.id === noteId ? { ...note, ...updatedNoteData } : note
-    );
-    
-    setNotes(updatedNotes);
-    setFilteredNotes(updatedNotes);
-    await saveNotesToCache(updatedNotes);
-    
-    // Si el usuario está autenticado, agregar a la cola de sincronización
-    if (user && isAuthenticated) {
-      // Preparar datos para sincronización
-      const syncData = {
-        ...updatedNoteData,
-        // Incluir información de medios eliminados si existe
-        deletedMediaIds: updatedNoteData.deletedMediaIds || []
-      };
+    // Si el usuario está autenticado y hay archivos para subir
+    if (user && isAuthenticated && (updatedNoteData.images || updatedNoteData.videos)) {
+      const formData = new FormData();
+      formData.append('title', updatedNoteData.title);
+      formData.append('details', updatedNoteData.details || '');
+      formData.append('idCode', updatedNoteData.idCode);
       
-      await addToSyncQueue(syncData, 'update');
-      await loadSyncStatus();
+      // Agregar medios eliminados si existen
+      if (updatedNoteData.deletedMediaIds) {
+        formData.append('deletedMediaIds', JSON.stringify(updatedNoteData.deletedMediaIds));
+      }
       
-      // Si hay medios eliminados, sincronizar inmediatamente
-      if (updatedNoteData.deletedMediaIds && updatedNoteData.deletedMediaIds.length > 0) {
-        await syncPendingNotes();
+      // Agregar imágenes
+      if (updatedNoteData.images) {
+        updatedNoteData.images.forEach((image, index) => {
+          formData.append('images', {
+            uri: image.uri,
+            type: image.type || 'image/jpeg',
+            name: image.fileName || `image_${index}.jpg`
+          });
+        });
+      }
+      
+      // Agregar videos
+      if (updatedNoteData.videos) {
+        updatedNoteData.videos.forEach((video, index) => {
+          formData.append('videos', {
+            uri: video.uri,
+            type: video.type || 'video/mp4',
+            name: video.fileName || `video_${index}.mp4`
+          });
+        });
+      }
+      
+      // Realizar la actualización en el backend
+      const response = await notesApi.update(noteId, formData);
+      
+      if (response.status === 200) {
+        // Actualizar el estado local con la respuesta del servidor
+        const updatedNotes = notes.map(note => 
+          note.id === noteId ? { ...note, ...response.data } : note
+        );
+        
+        setNotes(updatedNotes);
+        setFilteredNotes(updatedNotes);
+        await saveNotesToCache(updatedNotes);
+        Alert.alert("Éxito", "Nota actualizada correctamente");
+      }
+    } else {
+      // Para actualizaciones sin archivos o usuario no autenticado
+      const updatedNotes = notes.map(note => 
+        note.id === noteId ? { ...note, ...updatedNoteData } : note
+      );
+      
+      setNotes(updatedNotes);
+      setFilteredNotes(updatedNotes);
+      await saveNotesToCache(updatedNotes);
+      
+      // Si el usuario está autenticado, agregar a la cola de sincronización
+      if (user && isAuthenticated) {
+        await addToSyncQueue(updatedNoteData, 'update');
+        await loadSyncStatus();
       }
     }
   } catch (error) {
     console.error('Error updating note:', error);
+    Alert.alert("Error", "No se pudo actualizar la nota");
   }
 };
 

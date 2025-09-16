@@ -17,7 +17,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { Video } from 'expo-av';
-import { useAuth } from '../providers/AuthContext'; // Asegúrate de que la ruta sea correcta
+import { useAuth } from '../providers/AuthContext';
 
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['60%'],
@@ -25,7 +25,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
   enablePanDownToClose = true,
   selectedNote,
   handleDeleteNote,
-  handleUpdateNote, // Nueva prop para manejar actualizaciones
+  handleUpdateNote,
   timeAgo
 }, ref) => {
   const [modalVisible, setModalVisible] = useState(false);
@@ -35,8 +35,9 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDetails, setEditedDetails] = useState('');
   const { isAuthenticated } = useAuth();
- const [deletedMediaIds, setDeletedMediaIds] = useState([]);
+  const [deletedMediaIds, setDeletedMediaIds] = useState([]);
   const [deletedLocalMedia, setDeletedLocalMedia] = useState([]);
+  
   useEffect(() => {
     if (selectedNote) {
       setEditedTitle(selectedNote.title);
@@ -55,7 +56,8 @@ const NoteDetailBottomSheet = React.forwardRef(({
     setSelectedMedia(null);
     setMediaType('');
   };
-    const handleDeleteMedia = (mediaId, isLocal = false, mediaIndex, mediaType) => {
+
+  const handleDeleteMedia = (mediaId, isLocal = false, mediaIndex, mediaType) => {
     if (isLocal) {
       // Para medios locales
       const updatedNote = { ...selectedNote };
@@ -71,33 +73,36 @@ const NoteDetailBottomSheet = React.forwardRef(({
       setDeletedMediaIds([...deletedMediaIds, mediaId]);
     }
   };
+
   const handleSaveChanges = () => {
     if (!selectedNote) return;
     
-    const updatedNote = {
-      ...selectedNote,
-      title: editedTitle,
-      details: editedDetails
-    };
-    
-    // Aplicar eliminaciones de medios locales
-    deletedLocalMedia.forEach(({ mediaIndex, mediaType }) => {
-      if (mediaType === 'image' && updatedNote.images) {
-        updatedNote.images = updatedNote.images.filter((_, i) => i !== mediaIndex);
-      } else if (mediaType === 'video' && updatedNote.videos) {
-        updatedNote.videos = updatedNote.videos.filter((_, i) => i !== mediaIndex);
-      }
-    });
-
     if (isAuthenticated) {
-      // Para usuario autenticado, incluir IDs de medios a eliminar
+      // Para usuario autenticado
       handleUpdateNote(selectedNote.id, {
-        ...updatedNote,
+        title: editedTitle,
+        details: editedDetails,
+        idCode: selectedNote.idCode,
         deletedMediaIds: deletedMediaIds.length > 0 ? deletedMediaIds : undefined
       });
       Alert.alert("Éxito", "Nota actualizada correctamente");
     } else {
       // Para usuario no autenticado
+      const updatedNote = {
+        ...selectedNote,
+        title: editedTitle,
+        details: editedDetails
+      };
+      
+      // Aplicar eliminaciones de medios locales
+      deletedLocalMedia.forEach(({ mediaIndex, mediaType }) => {
+        if (mediaType === 'image' && updatedNote.images) {
+          updatedNote.images = updatedNote.images.filter((_, i) => i !== mediaIndex);
+        } else if (mediaType === 'video' && updatedNote.videos) {
+          updatedNote.videos = updatedNote.videos.filter((_, i) => i !== mediaIndex);
+        }
+      });
+
       Alert.alert(
         "Cambios guardados localmente",
         "Los cambios se han guardado en tu dispositivo. Inicia sesión para sincronizarlos con la nube.",
@@ -120,9 +125,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
     setIsEditing(false);
   };
 
-  // Modificar la función renderMediaItem para incluir botón de eliminar
   const renderMediaItem = (media, idx, type, isLocal = false) => {
-    // Determinar si el archivo es local o remoto
     const isLocalMedia = isLocal || (media.uri && !media.uri.startsWith('http'));
     const sourceUri = isLocalMedia ? media.uri : 'https://backend-noteeasy-appcrud.onrender.com/' + (media.filePath || '');
     const mediaId = media.id || `local-${idx}-${type}`;
@@ -257,37 +260,37 @@ const NoteDetailBottomSheet = React.forwardRef(({
                   </>
                 )}
                 
-                  {(selectedNote.media && selectedNote.media.length > 0) || 
-   (selectedNote.images && selectedNote.images.length > 0) || 
-   (selectedNote.videos && selectedNote.videos.length > 0) ? (
-    <View>
-      <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
-      
-      {/* Mostrar imágenes del backend */}
-      {selectedNote.media && selectedNote.media
-        .filter(media => media.fileType === 'image')
-        .map((media, idx) => 
-          renderMediaItem(media, idx, 'image', false)
-        )}
-      
-      {/* Mostrar videos del backend */}
-      {selectedNote.media && selectedNote.media
-        .filter(media => media.fileType === 'video')
-        .map((media, idx) => 
-          renderMediaItem(media, idx, 'video', false)
-        )}
-      
-      {/* Mostrar imágenes locales */}
-      {selectedNote.images && selectedNote.images.map((media, idx) => 
-        renderMediaItem(media, idx, 'image', true)
-      )}
-      
-      {/* Mostrar videos locales */}
-      {selectedNote.videos && selectedNote.videos.map((media, idx) => 
-        renderMediaItem(media, idx, 'video', true)
-      )}
-    </View>
-  ) : null}
+                {(selectedNote.media && selectedNote.media.length > 0) || 
+                  (selectedNote.images && selectedNote.images.length > 0) || 
+                  (selectedNote.videos && selectedNote.videos.length > 0) ? (
+                  <View>
+                    <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
+                    
+                    {/* Mostrar imágenes del backend */}
+                    {selectedNote.media && selectedNote.media
+                      .filter(media => media.fileType === 'image')
+                      .map((media, idx) => 
+                        renderMediaItem(media, idx, 'image', false)
+                      )}
+                    
+                    {/* Mostrar videos del backend */}
+                    {selectedNote.media && selectedNote.media
+                      .filter(media => media.fileType === 'video')
+                      .map((media, idx) => 
+                        renderMediaItem(media, idx, 'video', false)
+                      )}
+                    
+                    {/* Mostrar imágenes locales */}
+                    {selectedNote.images && selectedNote.images.map((media, idx) => 
+                      renderMediaItem(media, idx, 'image', true)
+                    )}
+                    
+                    {/* Mostrar videos locales */}
+                    {selectedNote.videos && selectedNote.videos.map((media, idx) => 
+                      renderMediaItem(media, idx, 'video', true)
+                    )}
+                  </View>
+                ) : null}
                 
                 <View style={styles.buttonRow}>
                   {isEditing ? (
@@ -410,7 +413,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
-   mediaActionIcon: {
+  mediaActionIcon: {
     padding: 5,
     marginLeft: 5,
   },
@@ -483,7 +486,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  // Estilos para el modal de visualización completa
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.9)',
@@ -518,7 +520,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 5,
   },
-  // Nuevos estilos para la funcionalidad de edición
   editInput: {
     borderWidth: 1,
     borderColor: COLORS.border,

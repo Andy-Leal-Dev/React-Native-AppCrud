@@ -441,7 +441,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
               justifyContent:'space-between', gap:8}}>
                <View style={{width:'80%'
                }}>
-                 <Text ellipsizeMode="tail" numberOfLines={1}  style={styles.textHeader}>Bienvenido. {user ? user.firstName : ''} </Text>
+                 <Text ellipsizeMode="tail" numberOfLines={1}  style={styles.textHeader}>Bienvenido {user ? user.firstName : ''} </Text>
                </View>
                {
                 user && isAuthenticated? (

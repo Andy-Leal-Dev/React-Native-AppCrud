@@ -15,6 +15,8 @@ import {
   BottomSheetView,
   BottomSheetScrollView
 } from '@gorhom/bottom-sheet';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { Video } from 'expo-av';
 import { useAuth } from '../providers/AuthContext';
@@ -231,7 +233,7 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
             onPress={() => openMediaViewer(media, type)}
             style={styles.mediaActionIcon}
           />
-          {/* Permitir eliminar archivos siempre, no solo en modo edición */}
+        
           <Ionicons 
             name="trash-outline" 
             size={24} 
@@ -270,7 +272,7 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
             onPress={() => openMediaViewer(media, type)}
             style={styles.mediaActionIcon}
           />
-          {/* Permitir eliminar archivos siempre, no solo en modo edición */}
+         
           <Ionicons 
             name="trash-outline" 
             size={24} 
@@ -289,72 +291,10 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
   );
 };
 
-// Agregar botones para añadir medios en modo edición
-{isEditing && (
-  <View style={styles.addMediaButtons}>
-    <TouchableOpacity
-      style={styles.addMediaButton}
-      onPress={pickImage}
-    >
-      <MaterialIcons name="add-a-photo" size={20} color="white" />
-      <Text style={styles.addMediaText}>Agregar Imágenes</Text>
-    </TouchableOpacity>
-    <TouchableOpacity
-      style={styles.addMediaButton}
-      onPress={pickVideo}
-    >
-      <MaterialIcons name="movie" size={20} color="white" />
-      <Text style={styles.addMediaText}>Agregar Videos</Text>
-    </TouchableOpacity>
-  </View>
-)}
+
 
 // Mostrar nuevos medios seleccionados
-{(newImages.length > 0 || newVideos.length > 0) && (
-  <View style={styles.newMediaContainer}>
-    <Text style={styles.mediaTitle}>Nuevos archivos por agregar:</Text>
-    {newImages.map((img, idx) => (
-      <View key={`new-img-${idx}`} style={styles.mediaItem}>
-        <Image source={{ uri: img.uri }} style={styles.mediaThumbnail} />
-        <View style={styles.mediaInfo}>
-          <Text style={styles.mediaName} numberOfLines={1}>{img.fileName || 'Imagen'}</Text>
-          <Text style={styles.mediaSize}>
-            {img.fileSize ? `${(img.fileSize / 1024).toFixed(2)} KB` : 'Tamaño desconocido'}
-          </Text>
-          <Text style={styles.newBadge}>Nuevo</Text>
-        </View>
-        <Ionicons 
-          name="trash-outline" 
-          size={24} 
-          color="#f44336" 
-          onPress={() => setNewImages(newImages.filter((_, i) => i !== idx))}
-          style={styles.mediaActionIcon}
-        />
-      </View>
-    ))}
-    {newVideos.map((vid, idx) => (
-      <View key={`new-vid-${idx}`} style={styles.mediaItem}>
-        <View style={styles.videoThumb}>
-          <MaterialIcons name="movie" size={30} color={COLORS.primary} />
-        </View>
-        <View style={styles.mediaInfo}>
-          <Text style={styles.mediaName} numberOfLines={1}>{vid.fileName || 'Video'}</Text>
-          <Text style={styles.mediaSize}>
-            {vid.fileSize ? `${(vid.fileSize / (1024 * 1024)).toFixed(2)} MB` : 'Tamaño desconocido'}
-          </Text>
-          <Text style={styles.newBadge}>Nuevo</Text>
-        </View>
-        <Ionicons 
-          name="trash-outline" 
-          size={24} 
-          color="#f44336" 
-          onPress={() => setNewVideos(newVideos.filter((_, i) => i !== idx))}
-          style={styles.mediaActionIcon}
-        />
-      </View>
-    ))}
-  </View>
-)}
+
   return (
     <>
       <BottomSheetModal
@@ -422,10 +362,73 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
                     )}
                   </View>
                 ) : null}
-                
+                {(newImages.length > 0 || newVideos.length > 0) && (
+  <View style={styles.newMediaContainer}>
+    <Text style={styles.mediaTitle}>Nuevos archivos por agregar:</Text>
+    {newImages.map((img, idx) => (
+      <View key={`new-img-${idx}`} style={styles.mediaItem}>
+        <Image source={{ uri: img.uri }} style={styles.mediaThumbnail} />
+        <View style={styles.mediaInfo}>
+          <Text style={styles.mediaName} numberOfLines={1}>{img.fileName || 'Imagen'}</Text>
+          <Text style={styles.mediaSize}>
+            {img.fileSize ? `${(img.fileSize / 1024).toFixed(2)} KB` : 'Tamaño desconocido'}
+          </Text>
+          <Text style={styles.newBadge}>Nuevo</Text>
+        </View>
+        <Ionicons 
+          name="trash-outline" 
+          size={24} 
+          color="#f44336" 
+          onPress={() => setNewImages(newImages.filter((_, i) => i !== idx))}
+          style={styles.mediaActionIcon}
+        />
+      </View>
+    ))}
+    {newVideos.map((vid, idx) => (
+      <View key={`new-vid-${idx}`} style={styles.mediaItem}>
+        <View style={styles.videoThumb}>
+          <MaterialIcons name="movie" size={30} color={COLORS.primary} />
+        </View>
+        <View style={styles.mediaInfo}>
+          <Text style={styles.mediaName} numberOfLines={1}>{vid.fileName || 'Video'}</Text>
+          <Text style={styles.mediaSize}>
+            {vid.fileSize ? `${(vid.fileSize / (1024 * 1024)).toFixed(2)} MB` : 'Tamaño desconocido'}
+          </Text>
+          <Text style={styles.newBadge}>Nuevo</Text>
+        </View>
+        <Ionicons 
+          name="trash-outline" 
+          size={24} 
+          color="#f44336" 
+          onPress={() => setNewVideos(newVideos.filter((_, i) => i !== idx))}
+          style={styles.mediaActionIcon}
+        />
+      </View>
+    ))}
+  </View>
+)}
                 <View style={styles.buttonRow}>
                   {isEditing ? (
                     <>
+                            {isEditing && (
+  <View style={styles.addMediaButtons}>
+    <TouchableOpacity
+      style={styles.addMediaButton}
+      onPress={pickImage}
+    >
+      <MaterialIcons name="add-a-photo" size={20} color="white" />
+      <Text style={styles.addMediaText}>Agregar Imágenes</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={styles.addMediaButton}
+      onPress={pickVideo}
+    >
+      <MaterialIcons name="movie" size={20} color="white" />
+      <Text style={styles.addMediaText}>Agregar Videos</Text>
+    </TouchableOpacity>
+  </View>
+)}
+       
                       <TouchableOpacity
                         style={[styles.actionButton, styles.saveButton]}
                         onPress={handleSaveChanges}
@@ -438,7 +441,9 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
                       >
                         <Text style={styles.actionButtonText}>Cancelar</Text>
                       </TouchableOpacity>
-                    </>
+
+                           </>
+                    
                   ) : (
                     <>
                     <TouchableOpacity
@@ -457,6 +462,7 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
                   )}
                   
                  
+
                 </View>
                 
                 {!isAuthenticated && (
@@ -475,7 +481,7 @@ const renderMediaItem = (media, idx, type, isLocal = false) => {
         </BottomSheetView>
       </BottomSheetModal>
 
-      {/* Modal para visualización completa de medios */}
+
       <Modal
         animationType="fade"
         transparent={true}
@@ -730,6 +736,7 @@ const styles = StyleSheet.create({
   flexDirection: 'row',
   justifyContent: 'space-around',
   marginVertical: 15,
+  gap: 20,
 },
 addMediaButton: {
   flexDirection: 'row',

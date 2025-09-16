@@ -18,6 +18,7 @@ import {
   BottomSheetModalProvider,
 
 } from '@gorhom/bottom-sheet';
+import es from 'date-fns/locale/es';
 import { useAuth } from '../../providers/AuthContext';
 import { useSync } from '../../providers/SyncContext';
 import * as ImagePicker from 'expo-image-picker';
@@ -86,7 +87,7 @@ const { user, isAuthenticated } = useAuth();
   const [notes, setNotes] = useState([]);
   const [filteredNotes, setFilteredNotes] = useState([]); // Notas filtradas
 
-
+const locale = es; 
 
   // Cargar notas al iniciar
    useEffect(() => {
@@ -550,7 +551,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
 
                       )}
 
-                      <Text style={styles.textCardNote}>{item.date || format(item.createdAt,'dd MMMM yyyy' )}</Text>
+                      <Text style={styles.textCardNote}>{item.date || format(item.createdAt,'dd MMMM yyyy',{locale} )}</Text>
                     
                    
                       {searchQuery.trim() !== '' ? (

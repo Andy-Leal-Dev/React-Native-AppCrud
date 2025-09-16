@@ -98,144 +98,175 @@ export const syncNotesWithBackend = async () => {
     const queue = await getSyncQueue();
     const idCodeMap = await getIdCodeMap();
     const results = [];
+    
     if (queue.length === 0 || !queue || queue.isEmpty) {
-      return [ ];
+      return [];
     } else {
-       
-    for (const item of queue) {
-      try {
-        console.log('Syncing note:', item.note.idCode, 'Action:', item.action);
-        const formData = new FormData();
-        
-        formData.append('title', item.note.title);
-        formData.append('details', item.note.details);
-        
-        if (item.note.idCode) {
-          formData.append('idCode', item.note.idCode);
-        }
-        
-        // Agregar imágenes y videos (tu código existente)
-        if (item.note.images && item.note.images.length > 0) {
-          item.note.images.forEach((image, index) => {
-            if (image.uri && image.type) {
-              formData.append('images', {
-                uri: image.uri,
-                type: image.type || 'image/jpeg',
-                name: image.fileName || `image_${index}.jpg`,
-              });
-            }
-          });
-        }
-        
-        if (item.note.videos && item.note.videos.length > 0) {
-          item.note.videos.forEach((video, index) => {
-            if (video.uri && video.type) {
-              formData.append('videos', {
-                uri: video.uri,
-                type: video.type || 'video/mp4',
-                name: video.fileName || `video_${index}.mp4`,
-              });
-            }
-          });
-        }
-        
-        let response;
-        let backendId;
-        
-        switch (item.action) {
-          case 'create':
-            response = await notesApi.create(formData);
-            console.log('Create response status:', response.status);
-            
-            // Manejar el status 302 como éxito
-            if (response.status === 302) {
-              console.log('Note already exists on backend - treating as success');
-              results.push({ 
-                success: true, 
-                status: 302,
-                message: 'Note already registered',
-                data: response.data,
-                alreadyExists: true
-              });
-              break;
-            }
-            
-            // Manejar otros status exitosos
-            if (response.status >= 200 && response.status < 300) {
-              console.log('Create successful:', response.data);
-              backendId = response.data.id;
-              if (item.note.idCode && backendId) {
-                await saveIdCodeMap(item.note.idCode, backendId);
-              }
-              results.push({ success: true, data: response.data });
-            } else {
-              // Manejar otros status no exitosos
-              results.push({ 
-                success: false, 
-                error: `Unexpected status: ${response.status}`,
-                data: response.data 
-              });
-            }
-            break;
-            
-          case 'update':
-            const updateId = idCodeMap[item.note.idCode] || item.note.id;
-            if (updateId) {
-              response = await notesApi.update(updateId, formData);
-              
-              if (response.status === 302 || (response.status >= 200 && response.status < 300)) {
-                results.push({ success: true, data: response.data });
-              } else {
-                results.push({ 
-                  success: false, 
-                  error: `Update failed with status: ${response.status}`,
-                  data: response.data 
+      // Bucle para procesar cada elemento de la cola de sincronización
+      for (const item of queue) {
+        try {
+          console.log('Syncing note:', item.note.idCode, 'Action:', item.action);
+          const formData = new FormData();
+          
+          formData.append('title', item.note.title);
+          formData.append('details', item.note.details || '');
+          
+          if (item.note.idCode) {
+            formData.append('idCode', item.note.idCode);
+          }
+          
+          // Agregar imágenes y videos
+          if (item.note.images && item.note.images.length > 0) {
+            item.note.images.forEach((image, index) => {
+              if (image.uri && image.type) {
+                formData.append('images', {
+                  uri: image.uri,
+                  type: image.type || 'image/jpeg',
+                  name: image.fileName || `image_${index}.jpg`,
                 });
               }
-            }
-            break;
-            
-          case 'delete':
-            const deleteId = idCodeMap[item.note.idCode] || item.note.id;
-            if (deleteId) {
-              response = await notesApi.delete(deleteId);
+            });
+          }
+          
+          if (item.note.videos && item.note.videos.length > 0) {
+            item.note.videos.forEach((video, index) => {
+              if (video.uri && video.type) {
+                formData.append('videos', {
+                  uri: video.uri,
+                  type: video.type || 'video/mp4',
+                  name: video.fileName || `video_${index}.mp4`,
+                });
+              }
+            });
+          }
+          
+          let response;
+          let backendId;
+          
+          switch (item.action) {
+            case 'create':
+              response = await notesApi.create(formData);
+              console.log('Create response status:', response.status);
               
-              if (response.status === 302 || (response.status >= 200 && response.status < 300)) {
-                // Eliminar del mapeo después de borrar
-                if (item.note.idCode) {
-                  const newMap = { ...idCodeMap };
-                  delete newMap[item.note.idCode];
-                  await AsyncStorage.setItem(ID_CODE_MAP_KEY, JSON.stringify(newMap));
+              // Manejar el status 302 como éxito
+              if (response.status === 302) {
+                console.log('Note already exists on backend - treating as success');
+                results.push({ 
+                  success: true, 
+                  status: 302,
+                  message: 'Note already registered',
+                  data: response.data,
+                  alreadyExists: true
+                });
+                break;
+              }
+              
+              // Manejar otros status exitosos
+              if (response.status >= 200 && response.status < 300) {
+                console.log('Create successful:', response.data);
+                backendId = response.data.id;
+                if (item.note.idCode && backendId) {
+                  await saveIdCodeMap(item.note.idCode, backendId);
                 }
                 results.push({ success: true, data: response.data });
               } else {
+                // Manejar otros status no exitosos
                 results.push({ 
                   success: false, 
-                  error: `Delete failed with status: ${response.status}`,
+                  error: `Unexpected status: ${response.status}`,
                   data: response.data 
                 });
               }
-            }
-            break;
+              break;
+              
+            case 'update':
+              const updateId = idCodeMap[item.note.idCode] || item.note.id;
+              if (updateId) {
+                console.log('Updating note with ID:', updateId);
+                response = await notesApi.update(updateId, formData);
+                
+                if (response.status === 302 || (response.status >= 200 && response.status < 300)) {
+                  console.log('Update successful for note:', updateId);
+                  results.push({ 
+                    success: true, 
+                    data: response.data,
+                    noteId: updateId
+                  });
+                } else {
+                  console.log('Update failed for note:', updateId, 'Status:', response.status);
+                  results.push({ 
+                    success: false, 
+                    error: `Update failed with status: ${response.status}`,
+                    data: response.data,
+                    noteId: updateId
+                  });
+                }
+              } else {
+                console.log('No valid ID found for update operation');
+                results.push({ 
+                  success: false, 
+                  error: 'No valid ID found for update operation',
+                  note: item.note
+                });
+              }
+              break;
+              
+            case 'delete':
+              const deleteId = idCodeMap[item.note.idCode] || item.note.id;
+              if (deleteId) {
+                console.log('Deleting note with ID:', deleteId);
+                response = await notesApi.delete(deleteId);
+                
+                if (response.status === 302 || (response.status >= 200 && response.status < 300)) {
+                  console.log('Delete successful for note:', deleteId);
+                  // Eliminar del mapeo después de borrar
+                  if (item.note.idCode) {
+                    const newMap = { ...idCodeMap };
+                    delete newMap[item.note.idCode];
+                    await AsyncStorage.setItem(ID_CODE_MAP_KEY, JSON.stringify(newMap));
+                  }
+                  results.push({ 
+                    success: true, 
+                    data: response.data,
+                    noteId: deleteId
+                  });
+                } else {
+                  console.log('Delete failed for note:', deleteId, 'Status:', response.status);
+                  results.push({ 
+                    success: false, 
+                    error: `Delete failed with status: ${response.status}`,
+                    data: response.data,
+                    noteId: deleteId
+                  });
+                }
+              } else {
+                console.log('No valid ID found for delete operation');
+                results.push({ 
+                  success: false, 
+                  error: 'No valid ID found for delete operation',
+                  note: item.note
+                });
+              }
+              break;
+          }
+          
+        } catch (error) {
+          // Este catch solo debería capturar errores de red o excepciones, no errores HTTP
+          const noteId = item.note.idCode || item.note.id || 'unknown';
+          console.log('Network error for note:', noteId, error.message);
+          
+          results.push({ 
+            success: false, 
+            error: 'Network error', 
+            message: error.message,
+            noteId: noteId
+          });
         }
-        
-      } catch (error) {
-        // Este catch solo debería capturar errores de red o excepciones, no errores HTTP
-        const noteId = item.note.idCode || item.note.id || 'unknown';
-        console.log('Network error for note:', noteId, error.message);
-        
-        results.push({ 
-          success: false, 
-          error: 'Network error', 
-          message: error.message 
-        });
       }
+      
+      console.log('Sync results:', results);
+      return results;
     }
-    console.log('Sync results:', results);
-    return results;
-    }
-    
- 
     
   } catch (error) {
     console.error('Error in sync process:', error);
@@ -300,4 +331,49 @@ const mergeNotes = (backendNotes, localNotes, idCodeMap) => {
   });
   
   return mergedNotes;
+};
+
+// Nueva función para procesar múltiples actualizaciones
+export const processMultipleUpdates = async (notesToUpdate) => {
+  try {
+    const results = [];
+    
+    // Procesar cada nota en un bucle
+    for (const noteData of notesToUpdate) {
+      const { noteId, updatedNote } = noteData;
+      
+      try {
+        // Agregar a la cola de sincronización
+        await addToSyncQueue(updatedNote, 'update');
+        
+        // Realizar la sincronización
+        const syncResults = await syncNotesWithBackend();
+        
+        // Filtrar resultados para esta nota específica
+        const noteResults = syncResults.filter(result => 
+          result.noteId === noteId || 
+          (result.data && result.data.id === noteId)
+        );
+        
+        results.push({
+          noteId,
+          success: noteResults.some(r => r.success),
+          results: noteResults
+        });
+        
+      } catch (error) {
+        console.error(`Error processing update for note ${noteId}:`, error);
+        results.push({
+          noteId,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('Error in processMultipleUpdates:', error);
+    throw error;
+  }
 };

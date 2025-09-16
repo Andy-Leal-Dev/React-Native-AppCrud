@@ -18,7 +18,7 @@ import {
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { Video } from 'expo-av';
 import { useAuth } from '../providers/AuthContext';
-
+import { format } from 'date-fns';
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['60%'],
   onChange,
@@ -254,7 +254,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                   <>
                     <Text style={styles.textTitleNote}>{selectedNote.title}</Text>
                     <Text style={{ marginBottom: 10, color: COLORS.muted }}>
-                      {selectedNote.date || selectedNote.createdAt}
+                      {selectedNote.date ||  format(selectedNote.createdAt,'dd MMMM yyyy' )}
                     </Text>
                     <Text style={styles.detailsText}>{selectedNote.details}</Text>
                   </>
@@ -309,20 +309,23 @@ const NoteDetailBottomSheet = React.forwardRef(({
                       </TouchableOpacity>
                     </>
                   ) : (
+                    <>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.editButton]}
                       onPress={() => setIsEditing(true)}
                     >
                       <Text style={styles.actionButtonText}>Editar Nota</Text>
                     </TouchableOpacity>
-                  )}
-                  
-                  <TouchableOpacity
+                     <TouchableOpacity
                     style={[styles.actionButton, styles.deleteButton]}
                     onPress={() => handleDeleteNote(selectedNote.id)}
                   >
                     <Text style={styles.actionButtonText}>Eliminar Nota</Text>
                   </TouchableOpacity>
+                    </>
+                  )}
+                  
+                 
                 </View>
                 
                 {!isAuthenticated && (

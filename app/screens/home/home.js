@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import Constants from 'expo-constants';
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-
+import { format } from 'date-fns';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
 
@@ -498,7 +498,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
 
                       )}
 
-                      <Text style={styles.textCardNote}>{item.date || item.createdAt}</Text>
+                      <Text style={styles.textCardNote}>{item.date || format(item.createdAt,'dd MMMM yyyy' )}</Text>
                     
                    
                       {searchQuery.trim() !== '' ? (

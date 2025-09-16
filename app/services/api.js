@@ -53,31 +53,8 @@ create: (noteData) => {
   });
 },
     update: (id, noteData) => {
-        const formData = new FormData();
-        formData.append('title', noteData.title);
-        formData.append('idCode', noteData.details);
-        if (noteData.details) {
-            formData.append('details', noteData.details);
-        }
-        if (noteData.images) {
-            noteData.images.forEach((image, index) => {
-                formData.append('images', {
-                    uri: image.uri,
-                    type: image.type,
-                    name: image.fileName || `image_${index}.jpg`,
-                });
-            });
-        }
-        if (noteData.videos) {
-            noteData.videos.forEach((video, index) => {
-                formData.append('videos', {
-                    uri: video.uri,
-                    type: video.type,
-                    name: video.fileName || `video_${index}.mp4`,
-                });
-            });
-        }
-        return api.put(`/notes/${id}`, formData, {
+        
+        return api.put(`/notes/${id}`, noteData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },

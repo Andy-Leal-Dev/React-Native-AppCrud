@@ -26,6 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AddNoteBottomSheet from '../../components/addNoteBottomSheet';
 import NoteDetailBottomSheet from '../../components/noteDetailBottomSheet';
 import {clearSyncQueue, generateUniqueId,loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
+import api, { notesApi } from "../../services/api";
 
 
 // Directorio para guardar archivos
@@ -231,6 +232,8 @@ const { user, isAuthenticated } = useAuth();
 };
 const handleUpdateNote = async (noteId, updatedNoteData) => {
   try {
+    console.log('Updating note:', updatedNoteData);
+
     // Si el usuario está autenticado y hay archivos para subir
     if (user && isAuthenticated && (updatedNoteData.images || updatedNoteData.videos)) {
       const formData = new FormData();
@@ -463,7 +466,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
                     
                       {searchQuery.trim() !== '' ? (
                         
-                    <View style={{width: '100%',height:50, flexDirection:'row', justifyContent:'space-between', gap:6}}>
+                    <View style={{width: '100%', flexDirection:'row', justifyContent:'space-between', gap:6}}>
                           <View width={'80%'}>
                               <Text ellipsizeMode="tail" numberOfLines={1} style={styles.textTitleNote}>
                           {highlightText(item.title, searchQuery, item.id)}
@@ -478,7 +481,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
                          } 
                        </View>
                       ) : (
-                         <View style={{width: '100%',height:50, flexDirection:'row', justifyContent:'space-between', gap:6}}>
+                         <View style={{width: '100%',flexDirection:'row', justifyContent:'space-between', gap:6}}>
                           <View width={'80%'}>
                               <Text ellipsizeMode="tail" numberOfLines={1} style={styles.textTitleNote}>
                           {highlightText(item.title, searchQuery, item.id)}

@@ -263,6 +263,26 @@ const { user, isAuthenticated } = useAuth();
       detailSheetRef.current?.close();
     }
   };
+  const handleUpdateNote = async (noteId, updatedNote) => {
+  try {
+    const updatedNotes = notes.map(note => 
+      note.id === noteId ? { ...note, ...updatedNote } : note
+    );
+    
+    setNotes(updatedNotes);
+    setFilteredNotes(updatedNotes);
+    await saveNotesToCache(updatedNotes);
+    
+    // Si el usuario está autenticado, agregar a la cola de sincronización
+    if (user && isAuthenticated) {
+      await addToSyncQueue(updatedNote, 'update');
+      await loadSyncStatus();
+    }
+  } catch (error) {
+    console.error('Error updating note:', error);
+  }
+};
+
 
   // Eliminar archivo
   const deleteFile = async (fileUri) => {
@@ -485,13 +505,14 @@ const { user, isAuthenticated } = useAuth();
             timeAgo={timeAgo}
           />
 
-          <NoteDetailBottomSheet
-            ref={detailSheetRef}
-            onChange={handleSheetChanges}
-            selectedNote={selectedNote}
-            handleDeleteNote={handleDeleteNote}
-            timeAgo={timeAgo}
-          />
+         <NoteDetailBottomSheet
+  ref={detailSheetRef}
+  onChange={handleSheetChanges}
+  selectedNote={selectedNote}
+  handleDeleteNote={handleDeleteNote}
+  handleUpdateNote={handleUpdateNote} // Nueva prop
+  timeAgo={timeAgo}
+/>
         </View>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>

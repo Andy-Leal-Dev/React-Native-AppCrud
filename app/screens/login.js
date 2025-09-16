@@ -5,11 +5,13 @@ import { ScrollView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
 import { authApi } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../providers/AuthContext';
 
 export default function LoginScreen({ navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const { checkAuthStatus}= useAuth();
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -24,9 +26,8 @@ export default function LoginScreen({ navigation }) {
             // Guardar token y datos de usuario
             await AsyncStorage.setItem('userToken', response.data.token);
             await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
-            
-            // Navegar a la pantalla principal
-            navigation.navigate('Home');
+            await checkAuthStatus();
+        
         } catch (error) {
             console.error('Login error:', error);
             Alert.alert('Error', error.response?.data?.error || 'Error al iniciar sesión');

@@ -2,32 +2,32 @@ import { createStackNavigator } from '@react-navigation/stack';
 import ProfileScreen from './profile';
 import LoginScreen from '../login';
 import RegisterScreen from '../signup';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
 import { useAuth } from '../../providers/AuthContext';
+
 const Stack = createStackNavigator();
 
 const StackNavigator = () => {
-const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
+  if (isLoading) {
+    return null; // o un componente de carga
+  }
 
-      return (
-    <Stack.Navigator initialRouteName={isAuthenticated ? "Profile" : "Login"}>
-      <Stack.Screen 
+  return (
+    <Stack.Navigator>
+  
+       {isAuthenticated ? (
+               <Stack.Screen 
         name="Profile" 
+        options={{ headerShown: false }} 
         component={ProfileScreen} 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="Login" 
-        component={LoginScreen} 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="Signup" 
-        component={RegisterScreen} 
-        options={{ headerShown: false }} 
-      />
+      /> 
+              ) : (
+                <>
+                  <Stack.Screen name="Login" component={LoginScreen}options={{ headerShown: false }}  />
+                  <Stack.Screen name="Signup" component={RegisterScreen}options={{ headerShown: false }}  />
+                </>
+              )}
     </Stack.Navigator>
   );
 };

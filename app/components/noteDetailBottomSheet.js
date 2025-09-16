@@ -68,7 +68,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                         {media.fileType === 'image' ? (
                           <>
                             <Image 
-                              source={{ uri: 'https://majestic-jalebi-e13e1a.netlify.app/'+ media.filePath }} 
+                              source={{ uri: 'https://backend-noteeasy-appcrud.onrender.com/'+ media.filePath }} 
                               style={styles.mediaThumbnail} 
                             />
                             <View style={styles.mediaInfo}>

@@ -76,7 +76,7 @@ export default function HomeScreen() {
   const [images, setImages] = useState([]);
   const [videos, setVideos] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
-const { user } = useAuth();
+const { user, isAuthenticated } = useAuth();
   const { performSync, isSyncing, pendingSyncCount, loadSyncStatus } = useSync();
   
   const [searchQuery, setSearchQuery] = useState(''); // Estado para la búsqueda
@@ -92,7 +92,7 @@ const { user } = useAuth();
     const initialApp = async () => {
       try {
    
-        if (user) {
+        if (user && isAuthenticated) {
   
           const notes = await initialSync();
           setNotes(notes);
@@ -110,11 +110,11 @@ const { user } = useAuth();
         setFilteredNotes(cachedNotes);
       }
     };
-    if(user && pendingSyncCount > 0){
+    if(isAuthenticated && pendingSyncCount >= 1 ){
       syncPendingNotes();
     }
     initialApp();
-  }, []);
+  }, [isAuthenticated, pendingSyncCount]);
 
 
 // En home.js, mejorar syncPendingNotes
@@ -128,6 +128,7 @@ const { user } = useAuth();
       setFilteredNotes(cachedNotes);
     } else {
       console.error('Sync failed:', result.error);
+      console.log(result)
       // Mantener las notas locales actuales
       const cachedNotes = await loadNotesFromCache();
       setNotes(cachedNotes);
@@ -175,10 +176,7 @@ const { user } = useAuth();
   // Copiar archivos al directorio de notas si el usuario está logueado
   let finalImages = images;
   let finalVideos = videos;
-  
-  if (user) {
-    try {
-      finalImages = [];
+  finalImages = [];
       for (const img of images) {
         const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
         const newPath = await copyFileToNotesDir(img.uri, fileName);
@@ -203,11 +201,6 @@ const { user } = useAuth();
           addedAt: new Date(),
         });
       }
-    } catch (error) {
-      console.error('Error copying files:', error);
-    }
-  }
-
   const newNote = {
       id: newNoteId,
       idCode: idCode,
@@ -217,7 +210,7 @@ const { user } = useAuth();
       timestamp: Date.now(),
       images: finalImages,
       videos: finalVideos,
-      synced: !user // Si no hay usuario, no está sincronizada
+      synced: 1 // Si no hay usuario, no está sincronizada
     };
 
     const updatedNotes = [...notes, newNote];
@@ -330,18 +323,45 @@ const { user } = useAuth();
             <View style={styles.header}>
               <View style={{flexDirection:'row', alignItems:'center',
               justifyContent:'space-between', gap:8}}>
-                <Text style={styles.textHeader}>Hola! {user ? user.firstName : 'usuario'} </Text>
+               <View style={{width:'80%'
+               }}>
+                 <Text ellipsizeMode="tail" numberOfLines={1}  style={styles.textHeader}>Bienvenido. {user ? user.firstName : ''} </Text>
+               </View>
+               {
+                user && isAuthenticated? (
                 <TouchableOpacity
-      style={[styles.syncButton, styles.syncButton, isSyncing && styles.syncingButton]}
-      onPress={syncPendingNotes}
-      disabled={isSyncing}
-    >
-      <Ionicons
-        name={isSyncing ? "refresh-circle" : "cloud-upload"}
-        size={20}
-        color="white"
-      />
-    </TouchableOpacity>
+                  style={[styles.syncButton, isSyncing ? styles.syncingButton : null]}
+                  onPress={syncPendingNotes}
+                  disabled={isSyncing || pendingSyncCount === 0}
+                >
+                  {isSyncing ? (
+                    <MaterialIcons name="sync" size={20} color="white" />
+                  ) : (
+                    <Ionicons name="cloud-upload" size={20} color="white" />
+                  )}
+                  {pendingSyncCount > 0 && !isSyncing && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        backgroundColor: '#F44336',
+                        borderRadius: 8,
+                        width: 16,
+                        height: 16,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                        {pendingSyncCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+               ): null
+               }
+               
               </View>
               <View style={styles.ViewSearch}>
                 <TextInput
@@ -379,18 +399,44 @@ const { user } = useAuth();
                     onPress={() => handlePresentDetailSheet(item)}
                   >
                     <View style={styles.viewCardNote}>
-                      {/* Resaltar texto coincidente en el título */}
+                    
                       {searchQuery.trim() !== '' ? (
-                        <Text style={styles.textTitleNote}>
+                        
+                    <View style={{width: '100%',height:50, flexDirection:'row', justifyContent:'space-between', gap:6}}>
+                          <View width={'80%'}>
+                              <Text ellipsizeMode="tail" numberOfLines={1} style={styles.textTitleNote}>
                           {highlightText(item.title, searchQuery, item.id)}
                         </Text>
+                          </View>
+                         {
+                        item.syned ==1 ?
+                          (<Ionicons name="cloud-done" size={25} color="#4CAF50" /> )
+                        :
+                         (<Ionicons name="cloud-offline" size={25} color="#F44336" />)
+                         
+                         } 
+                       </View>
                       ) : (
-                        <Text style={styles.textTitleNote}>{item.title}</Text>
+                         <View style={{width: '100%',height:50, flexDirection:'row', justifyContent:'space-between', gap:6}}>
+                          <View width={'80%'}>
+                              <Text ellipsizeMode="tail" numberOfLines={1} style={styles.textTitleNote}>
+                          {highlightText(item.title, searchQuery, item.id)}
+                        </Text>
+                          </View>
+                         {
+                        item.syned ==1 ?
+                          (<Ionicons name="cloud-done" size={25} color="#4CAF50" /> )
+                        :
+                         (<Ionicons name="cloud-offline" size={25} color="#F44336" />)
+                         
+                         } 
+                       </View>
+
                       )}
 
                       <Text style={styles.textCardNote}>{item.date || item.createdAt}</Text>
-
-                      {/* Resaltar texto coincidente en los detalles */}
+                    
+                   
                       {searchQuery.trim() !== '' ? (
                         <Text
                           style={styles.textCardNote}
@@ -567,6 +613,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     marginBottom: 4,
     letterSpacing: 0.5,
+
   },
   textCardNote: {
     marginTop: 3,

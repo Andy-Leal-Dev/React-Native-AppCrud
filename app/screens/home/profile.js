@@ -44,10 +44,13 @@ return (
       <View style={styles.cardProfile}>
         <Text style={styles.textHeader}>Mi Perfil</Text>
         <View style={styles.avatarContainer}>
-          <Image
-            source={{ uri: 'https://i.pravatar.cc/150?img=3' }}
-            style={styles.avatar}
-          />
+          {user.avatar ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#e0e0e0' }]}>
+              <MaterialIcons name="person" size={40} color="#888" />
+            </View>
+          )}
         </View>
         <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
         <Text style={styles.email}>{user.email}</Text>

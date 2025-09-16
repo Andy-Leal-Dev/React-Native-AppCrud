@@ -15,6 +15,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -29,9 +30,13 @@ export const AuthProvider = ({ children }) => {
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
+        setIsAuthenticated(true); // Asegurar que se establece como autenticado
+      } else {
+        setIsAuthenticated(false); // Asegurar que se establece como no autenticado
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -49,10 +54,12 @@ export const AuthProvider = ({ children }) => {
       
       setToken(userToken);
       setUser(userData);
+      setIsAuthenticated(true); // Añadir esta línea crucial
       
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
+      setIsAuthenticated(false); // Asegurar que se establece como no autenticado en caso de error
       return { 
         success: false, 
         error: error.response?.data?.error || 'Error al iniciar sesión' 
@@ -72,10 +79,12 @@ export const AuthProvider = ({ children }) => {
       
       setToken(userToken);
       setUser(newUser);
+      setIsAuthenticated(true); // Añadir esta línea crucial
       
       return { success: true };
     } catch (error) {
       console.error('Registration error:', error);
+      setIsAuthenticated(false); // Asegurar que se establece como no autenticado en caso de error
       return { 
         success: false, 
         error: error.response?.data?.error || 'Error al registrar usuario' 
@@ -90,6 +99,7 @@ export const AuthProvider = ({ children }) => {
       
       setToken(null);
       setUser(null);
+      setIsAuthenticated(false); // Asegurar que se establece como no autenticado
       
       return { success: true };
     } catch (error) {
@@ -113,7 +123,7 @@ export const AuthProvider = ({ children }) => {
     user,
     token,
     isLoading,
-    isAuthenticated: !!user && !!token,
+    isAuthenticated, // Usar el estado real en lugar de calcularlo
     login,
     register,
     logout,

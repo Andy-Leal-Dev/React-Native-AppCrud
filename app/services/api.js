@@ -29,6 +29,10 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+api.defaults.validateStatus = function (status) {
+  // Aceptar todos los status codes incluyendo 302
+  return status >= 200 && status < 500; // Esto incluye 200-499
+};
 
 export const authApi ={
     login: (email, password) => api.post("/auth/login", { email, password }),

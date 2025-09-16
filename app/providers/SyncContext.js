@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSyncQueue, loadNotesFromCache, syncNotesWithBackend, clearSyncQueue, loadNotesFromBackend, saveNotesToCache } from '../services/syncServices';
 
 const SyncContext = createContext();
-
+const SYNC_QUEUE_KEY = '@sync_queue';
 export const useSync = () => {
   const context = useContext(SyncContext);
   if (!context) {
@@ -46,7 +46,7 @@ export const SyncProvider = ({ children }) => {
   };
 
   const performSync = async () => {
-    if (isSyncing) return { success: false, error: 'Ya se está sincronizando' };
+    if (isSyncing) return { success: true, message: 'Ya se está sincronizando' };
     
     setIsSyncing(true);
     setSyncError(null);
@@ -54,7 +54,12 @@ export const SyncProvider = ({ children }) => {
     try {
       // 1. Sincronizar la cola de operaciones pendientes
       const syncResults = await syncNotesWithBackend();
-      
+        if (syncResults.length === 0) {
+      console.log('No operations to sync');
+      await AsyncStorage.setItem('@last_sync', new Date().toISOString());
+      setLastSync(new Date());
+      return { success: true, message: 'No operations to sync' };
+    }
       // 2. Verificar si hubo éxito en alguna operación
       const hasSuccess = syncResults.some(result => result.success);
       console.log('Sync results:', syncResults);

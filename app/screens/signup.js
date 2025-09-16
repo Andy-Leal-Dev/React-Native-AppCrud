@@ -3,13 +3,16 @@ import { View, Text, TextInput, TouchableOpacity, Platform,StyleSheet,Keyboard, 
 import logo from '../../assets/logoBg.png';
 import { ScrollView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
+import { authApi } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../providers/AuthContext';
 export default function RegisterScreen({ navigation }) {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-
+const { checkAuthStatus}= useAuth();
     const handleRegister = async () => {
         if (!firstName || !lastName || !email || !password) {
             Alert.alert('Error', 'Por favor completa todos los campos');
@@ -28,7 +31,7 @@ export default function RegisterScreen({ navigation }) {
             // Guardar token y datos de usuario
             await AsyncStorage.setItem('userToken', response.data.token);
             await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
-            
+            await checkAuthStatus();
             // Navegar a la pantalla principal
             navigation.navigate('Home');
         } catch (error) {

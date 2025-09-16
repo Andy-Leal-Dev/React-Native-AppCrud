@@ -98,24 +98,25 @@ export const syncNotesWithBackend = async () => {
     const queue = await getSyncQueue();
     const idCodeMap = await getIdCodeMap();
     const results = [];
-    
+    if (queue.length === 0 || !queue || queue.isEmpty) {
+      return [ ];
+    } else {
+       
     for (const item of queue) {
       try {
-        console.log('Syncing note:', item.note, 'Action:', item.action);
+        console.log('Syncing note:', item.note.idCode, 'Action:', item.action);
         const formData = new FormData();
         
         formData.append('title', item.note.title);
-        formData.append('details', item.note.details );
+        formData.append('details', item.note.details);
         
-        // Incluir idCode si existe
         if (item.note.idCode) {
           formData.append('idCode', item.note.idCode);
         }
         
-        // Agregar imágenes si existen
+        // Agregar imágenes y videos (tu código existente)
         if (item.note.images && item.note.images.length > 0) {
           item.note.images.forEach((image, index) => {
-            // Verificar que el archivo existe antes de agregarlo
             if (image.uri && image.type) {
               formData.append('images', {
                 uri: image.uri,
@@ -126,10 +127,8 @@ export const syncNotesWithBackend = async () => {
           });
         }
         
-        // Agregar videos si existen
         if (item.note.videos && item.note.videos.length > 0) {
           item.note.videos.forEach((video, index) => {
-            // Verificar que el archivo existe antes de agregarlo
             if (video.uri && video.type) {
               formData.append('videos', {
                 uri: video.uri,
@@ -140,54 +139,104 @@ export const syncNotesWithBackend = async () => {
           });
         }
         
-        let result;
+        let response;
         let backendId;
         
         switch (item.action) {
           case 'create':
-            result = await notesApi.create(formData);
-            console,log('Create result:', result);
-            backendId = result.data.id;
-            // Guardar mapeo de ID local a ID del backend
-            if (item.note.idCode && backendId) {
-              await saveIdCodeMap(item.note.idCode, backendId);
+            response = await notesApi.create(formData);
+            console.log('Create response status:', response.status);
+            
+            // Manejar el status 302 como éxito
+            if (response.status === 302) {
+              console.log('Note already exists on backend - treating as success');
+              results.push({ 
+                success: true, 
+                status: 302,
+                message: 'Note already registered',
+                data: response.data,
+                alreadyExists: true
+              });
+              break;
+            }
+            
+            // Manejar otros status exitosos
+            if (response.status >= 200 && response.status < 300) {
+              console.log('Create successful:', response.data);
+              backendId = response.data.id;
+              if (item.note.idCode && backendId) {
+                await saveIdCodeMap(item.note.idCode, backendId);
+              }
+              results.push({ success: true, data: response.data });
+            } else {
+              // Manejar otros status no exitosos
+              results.push({ 
+                success: false, 
+                error: `Unexpected status: ${response.status}`,
+                data: response.data 
+              });
             }
             break;
             
           case 'update':
-            // Usar el ID del backend si existe el mapeo
             const updateId = idCodeMap[item.note.idCode] || item.note.id;
             if (updateId) {
-              result = await notesApi.update(updateId, formData);
+              response = await notesApi.update(updateId, formData);
+              
+              if (response.status === 302 || (response.status >= 200 && response.status < 300)) {
+                results.push({ success: true, data: response.data });
+              } else {
+                results.push({ 
+                  success: false, 
+                  error: `Update failed with status: ${response.status}`,
+                  data: response.data 
+                });
+              }
             }
             break;
             
           case 'delete':
-            // Usar el ID del backend si existe el mapeo
             const deleteId = idCodeMap[item.note.idCode] || item.note.id;
             if (deleteId) {
-              result = await notesApi.delete(deleteId);
-              // Eliminar del mapeo después de borrar
-              if (item.note.idCode) {
-                const newMap = { ...idCodeMap };
-                delete newMap[item.note.idCode];
-                await AsyncStorage.setItem(ID_CODE_MAP_KEY, JSON.stringify(newMap));
+              response = await notesApi.delete(deleteId);
+              
+              if (response.status === 302 || (response.status >= 200 && response.status < 300)) {
+                // Eliminar del mapeo después de borrar
+                if (item.note.idCode) {
+                  const newMap = { ...idCodeMap };
+                  delete newMap[item.note.idCode];
+                  await AsyncStorage.setItem(ID_CODE_MAP_KEY, JSON.stringify(newMap));
+                }
+                results.push({ success: true, data: response.data });
+              } else {
+                results.push({ 
+                  success: false, 
+                  error: `Delete failed with status: ${response.status}`,
+                  data: response.data 
+                });
               }
             }
             break;
         }
-        console.log('Sync successful for note:', item.note, 'Result:', result?.data);
-        results.push({ success: true, result });
-      } catch (error) {
         
-        const noteId = item.note && (item.note.id !== undefined ? item.note.id : (item.note.idCode !== undefined ? item.note.idCode : 'unknown'));
-        console.log('Sync error for note:', noteId, error.response?.data || error.message);
- 
-        results.push({ success: false, error });
+      } catch (error) {
+        // Este catch solo debería capturar errores de red o excepciones, no errores HTTP
+        const noteId = item.note.idCode || item.note.id || 'unknown';
+        console.log('Network error for note:', noteId, error.message);
+        
+        results.push({ 
+          success: false, 
+          error: 'Network error', 
+          message: error.message 
+        });
       }
     }
     console.log('Sync results:', results);
     return results;
+    }
+    
+ 
+    
   } catch (error) {
     console.error('Error in sync process:', error);
     throw error;

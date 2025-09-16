@@ -230,12 +230,45 @@ const { user, isAuthenticated } = useAuth();
     setVideos([]);
     addNoteSheetRef.current?.close();
 };
+// Mejorar la función handleUpdateNote para manejar nuevos archivos
 const handleUpdateNote = async (noteId, updatedNoteData) => {
   try {
     console.log('Updating note:', updatedNoteData);
 
-    // Si el usuario está autenticado y hay archivos para subir
-    if (user && isAuthenticated && (updatedNoteData.images || updatedNoteData.videos)) {
+    // Si hay nuevos archivos, copiarlos al directorio de notas
+    let finalNewImages = [];
+    let finalNewVideos = [];
+    
+    if (updatedNoteData.newImages && updatedNoteData.newImages.length > 0) {
+      for (const img of updatedNoteData.newImages) {
+        const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        const newPath = await copyFileToNotesDir(img.uri, fileName);
+        finalNewImages.push({
+          uri: newPath,
+          fileName: fileName,
+          fileSize: img.fileSize || 0,
+          type: 'image/jpeg',
+          addedAt: new Date(),
+        });
+      }
+    }
+    
+    if (updatedNoteData.newVideos && updatedNoteData.newVideos.length > 0) {
+      for (const vid of updatedNoteData.newVideos) {
+        const fileName = `video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+        const newPath = await copyFileToNotesDir(vid.uri, fileName);
+        finalNewVideos.push({
+          uri: newPath,
+          fileName: fileName,
+          fileSize: vid.fileSize || 0,
+          type: 'video/mp4',
+          addedAt: new Date(),
+        });
+      }
+    }
+
+    // Si el usuario está autenticado
+    if (user && isAuthenticated) {
       const formData = new FormData();
       formData.append('title', updatedNoteData.title);
       formData.append('details', updatedNoteData.details || '');
@@ -246,9 +279,9 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
         formData.append('deletedMediaIds', JSON.stringify(updatedNoteData.deletedMediaIds));
       }
       
-      // Agregar imágenes
-      if (updatedNoteData.images) {
-        updatedNoteData.images.forEach((image, index) => {
+      // Agregar nuevas imágenes
+      if (finalNewImages.length > 0) {
+        finalNewImages.forEach((image, index) => {
           formData.append('images', {
             uri: image.uri,
             type: image.type || 'image/jpeg',
@@ -257,9 +290,9 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
         });
       }
       
-      // Agregar videos
-      if (updatedNoteData.videos) {
-        updatedNoteData.videos.forEach((video, index) => {
+      // Agregar nuevos videos
+      if (finalNewVideos.length > 0) {
+        finalNewVideos.forEach((video, index) => {
           formData.append('videos', {
             uri: video.uri,
             type: video.type || 'video/mp4',
@@ -272,10 +305,19 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
       const response = await notesApi.update(noteId, formData);
       
       if (response.status === 200) {
-        // Actualizar el estado local con la respuesta del servidor
-        const updatedNotes = notes.map(note => 
-          note.id === noteId ? { ...note, ...response.data } : note
-        );
+        // Actualizar el estado local
+        const updatedNotes = notes.map(note => {
+          if (note.id === noteId) {
+            return {
+              ...note,
+              ...response.data,
+              // Combinar imágenes y videos existentes con los nuevos
+              images: [...(note.images || []), ...finalNewImages],
+              videos: [...(note.videos || []), ...finalNewVideos]
+            };
+          }
+          return note;
+        });
         
         setNotes(updatedNotes);
         setFilteredNotes(updatedNotes);
@@ -283,20 +325,30 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
         Alert.alert("Éxito", "Nota actualizada correctamente");
       }
     } else {
-      // Para actualizaciones sin archivos o usuario no autenticado
-      const updatedNotes = notes.map(note => 
-        note.id === noteId ? { ...note, ...updatedNoteData } : note
-      );
+      // Para usuario no autenticado
+      const updatedNotes = notes.map(note => {
+        if (note.id === noteId) {
+          return {
+            ...note,
+            title: updatedNoteData.title,
+            details: updatedNoteData.details,
+            // Combinar imágenes y videos existentes con los nuevos
+            images: [...(note.images || []), ...finalNewImages],
+            videos: [...(note.videos || []), ...finalNewVideos]
+          };
+        }
+        return note;
+      });
       
       setNotes(updatedNotes);
       setFilteredNotes(updatedNotes);
       await saveNotesToCache(updatedNotes);
       
-      // Si el usuario está autenticado, agregar a la cola de sincronización
-      if (user && isAuthenticated) {
-        await addToSyncQueue(updatedNoteData, 'update');
-        await loadSyncStatus();
-      }
+      Alert.alert(
+        "Cambios guardados localmente",
+        "Los cambios se han guardado en tu dispositivo. Inicia sesión para sincronizarlos con la nube.",
+        [{ text: "Entendido" }]
+      );
     }
   } catch (error) {
     console.error('Error updating note:', error);

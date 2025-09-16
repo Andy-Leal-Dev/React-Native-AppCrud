@@ -17,7 +17,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { Video } from 'expo-av';
-import { useAuth } from '../../providers/AuthContext'; // Asegúrate de que la ruta sea correcta
+import { useAuth } from '../providers/AuthContext'; // Asegúrate de que la ruta sea correcta
 
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['60%'],

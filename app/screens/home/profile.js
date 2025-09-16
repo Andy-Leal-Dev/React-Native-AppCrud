@@ -14,30 +14,15 @@ export default function ProfileScreen({ navigation }) {
 
 
   const handleLogout = async () => {
-    const result = await logout();
-    if (result.success) {
-      navigation.replace('Login');
-    }
+   await logout();
+   
   };
 
   const handleLogin = () => {
     navigation.navigate('Login');
   };
 
-   if (!user) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.cardProfile}>
-          <Text style={styles.textHeader}>Mi Perfil</Text>
-          <Text style={styles.notLoggedText}>No has iniciado sesión</Text>
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <MaterialIcons name="login" size={20} color="white" />
-            <Text style={styles.loginText}>Iniciar sesión</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+
 
 return (
     <View style={styles.container}>

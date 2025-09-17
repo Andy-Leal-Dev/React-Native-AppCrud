@@ -22,17 +22,19 @@ import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { Video } from 'expo-av';
 import { useAuth } from '../providers/AuthContext';
 import { format } from 'date-fns';
+import es from 'date-fns/locale/es';
 import { notesApi } from '../services/api';
 import { 
   addToSyncQueue, 
   generateUniqueId, 
-  copyFileToNotesDir,
+
   loadNotesFromCache,
   saveNotesToCache,
   deleteFile
 } from '../services/syncServices';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { copyFileToNotesDir} from '../utils/fileUtils';
+import { el } from 'date-fns/locale';
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
 
 const NoteDetailBottomSheet = React.forwardRef(({
@@ -58,7 +60,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isLocalNote, setIsLocalNote] = useState(false);
-
+const locale = es; 
   // Fetch note details when selectedNoteId changes
   useEffect(() => {
     if (selectedNoteId) {
@@ -73,6 +75,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
     try {
       // Check if it's a local note (no idCode or starts with local-)
       const cachedNotes = await loadNotesFromCache();
+      console.log('Cached notes:', cachedNotes);
       const localNote = cachedNotes.find(n => 
         n.id === selectedNoteId || n.idCode === selectedNoteId
       );
@@ -87,7 +90,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
         // It's a synced note, try to fetch from backend first
         try {
           const response = await notesApi.getById(localNote.id);
-          setNote(response.data);
+          setNote(response.data[0]);
           setIsLocalNote(false);
           setEditedTitle(response.data.title);
           setEditedDetails(response.data.details || '');
@@ -103,7 +106,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
         // Try to fetch from backend
         try {
           const response = await notesApi.getById(selectedNoteId);
-          setNote(response.data);
+          setNote(response.data[0]);
           setIsLocalNote(false);
           setEditedTitle(response.data.title);
           setEditedDetails(response.data.details || '');
@@ -221,8 +224,17 @@ const NoteDetailBottomSheet = React.forwardRef(({
       if (isAuthenticated && !isLocalNote) {
         // For authenticated user - update via API
         const formData = new FormData();
-        formData.append('title', editedTitle);
-        formData.append('details', editedDetails || '');
+        if(editedTitle !== null && editedTitle !== note.title){
+          formData.append('title', editedTitle);
+        } else{
+          formData.append('title', note.title);
+        }
+        if (editedDetails !== null && editedDetails !== note.details){
+          formData.append('details', editedDetails);
+        }else{
+          formData.append('details', note.details );
+        }
+  
         formData.append('idCode', note.idCode || note.id);
         
         // Add deleted media IDs
@@ -255,8 +267,11 @@ const NoteDetailBottomSheet = React.forwardRef(({
         }
 
         const response = await notesApi.update(note.id, formData);
-        
-        if (response.status === 200 || response.status === 302) {
+      
+        if (response.status === 201 || response.status === 302) {
+          console.log('Note updated successfully:', response.data);
+              // Refresh the note details
+          fetchNoteDetails();
           // Update local cache with the new data
           const cachedNotes = await loadNotesFromCache();
           const updatedNotes = cachedNotes.map(n => 
@@ -267,8 +282,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
           Alert.alert("Éxito", "Nota actualizada correctamente");
           onNoteUpdated({ ...response.data, synced: 1 });
           
-          // Refresh the note details
-          fetchNoteDetails();
+      
         }
       } else {
         // For unauthenticated user or local note - update locally
@@ -383,8 +397,17 @@ const NoteDetailBottomSheet = React.forwardRef(({
 
   const deleteMediaFromBackend = async (mediaId) => {
     try {
-      await notesApi.deleteMedia(mediaId);
-      return true;
+      Alert.alert("Eliminar Archivo","Estas Seguro de borrar esta imagen?",[
+        {text:"Cancelar"},
+        {text: "Eliminar archivo", onPress:async()=>{
+            const response = await notesApi.deleteMedia(mediaId);
+      if(response.status== 200 || response.status ==201){
+        fetchNoteDetails();
+      }
+        }}
+      ])
+    
+       return true;
     } catch (error) {
       console.error('Error deleting media from backend:', error);
       return false;
@@ -429,12 +452,12 @@ const NoteDetailBottomSheet = React.forwardRef(({
               style={styles.mediaActionIcon}
             />
           
-            {isEditing && (
+            
               <Ionicons 
                 name="trash-outline" 
                 size={24} 
                 color="#f44336" 
-                onPress={() => handleDeleteMedia(
+                onPress={() => deleteMediaFromBackend(
                   media.id, 
                   isLocalMedia, 
                   idx, 
@@ -442,7 +465,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 )}
                 style={styles.mediaActionIcon}
               />
-            )}
+            
           </>
         ) : (
           <>
@@ -521,6 +544,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
 
  
   return (
+    console.log('Rendering note:', note),
     <>
       <BottomSheetModal
         ref={ref}
@@ -538,7 +562,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                     <Ionicons name="cloud-offline" size={16} color="#F44336" />
                     <Text style={styles.statusText}>Local</Text>
                   </View>
-                ) : note.synced === 1 ? (
+                ) : note.synced == 1 ? (
                   <View style={[styles.statusBadge, styles.syncedBadge]}>
                     <Ionicons name="cloud-done" size={16} color="#4CAF50" />
                     <Text style={styles.statusText}>Sincronizado</Text>
@@ -571,7 +595,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 <>
                   <Text style={styles.textTitleNote}>{note.title}</Text>
                   <Text style={{ marginBottom: 10, color: COLORS.muted }}>
-                    {note.date || format(new Date(note.createdAt),'dd MMMM yyyy' )}
+                    {note.date ||note.createdAt}
                   </Text>
                   <Text style={styles.detailsText}>{note.details}</Text>
                 </>
@@ -968,6 +992,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   editButton: {
+    marginTop: 20,
     backgroundColor: COLORS.primary,
   },
   saveButton: {

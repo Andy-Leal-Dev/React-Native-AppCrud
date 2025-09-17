@@ -35,10 +35,7 @@ return (
         </View>
         <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
         <Text style={styles.email}>{user.email}</Text>
-        <TouchableOpacity style={styles.editButton}>
-          <MaterialIcons name="edit" size={20} color="#4f8ef7" />
-          <Text style={styles.editText}>Editar perfil</Text>
-        </TouchableOpacity>
+        
       </View>
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <MaterialIcons name="logout" size={24} color="white" />

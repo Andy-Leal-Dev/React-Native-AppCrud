@@ -212,7 +212,7 @@ const locale = es;
       timestamp: Date.now(),
       images: finalImages,
       videos: finalVideos,
-      synced: 1 // Si no hay usuario, no está sincronizada
+      synced: 0 // Si no hay usuario, no está sincronizada
     };
 
     const updatedNotes = [...notes, newNote];
@@ -526,7 +526,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
                         </Text>
                           </View>
                          {
-                        item.syned ==1 ?
+                        item.synced == 1 ?
                           (<Ionicons name="cloud-done" size={25} color="#4CAF50" /> )
                         :
                          (<Ionicons name="cloud-offline" size={25} color="#F44336" />)
@@ -541,7 +541,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
                         </Text>
                           </View>
                          {
-                        item.syned ==1 ?
+                        item.synced ==1 ?
                           (<Ionicons name="cloud-done" size={25} color="#4CAF50" /> )
                         :
                          (<Ionicons name="cloud-offline" size={25} color="#F44336" />)

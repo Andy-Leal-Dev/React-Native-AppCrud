@@ -24,6 +24,7 @@ import { useAuth } from '../providers/AuthContext';
 import { format } from 'date-fns';
 import { notesApi } from '../services/api';
 import { addToSyncQueue, generateUniqueId, copyFileToNotesDir } from '../services/syncServices';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
 
@@ -63,16 +64,20 @@ const NoteDetailBottomSheet = React.forwardRef(({
     setLoading(true);
     try {
       // Check if it's a local note (no idCode or starts with local-)
-      if (selectedNoteId.startsWith('local-') || !selectedNoteId.includes('-')) {
+      if (selectedNoteId) {
         // Load from local cache
         const cachedNotes = await AsyncStorage.getItem('@notes_cache');
         const notes = cachedNotes ? JSON.parse(cachedNotes) : [];
-        const localNote = notes.find(n => n.id === selectedNoteId || n.idCode === selectedNoteId);
+        const localNote = notes.find(n => n.id === selectedNoteId);
         setNote(localNote);
+        setEditedTitle(localNote.title);
+        setEditedDetails(localNote.details || '');
       } else {
         // Fetch from backend
         const response = await notesApi.getById(selectedNoteId);
         setNote(response.data);
+        setEditedTitle(response.data.title);
+        setEditedDetails(response.data.details || '');
       }
     } catch (error) {
       console.error('Error fetching note details:', error);
@@ -123,7 +128,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       allowsEditing: true,
       aspect: [4, 3],
@@ -145,7 +150,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
 
   const pickVideo = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       allowsMultipleSelection: true,
       quality: 1,
     });
@@ -167,21 +172,12 @@ const NoteDetailBottomSheet = React.forwardRef(({
     if (!note) return;
     
     try {
-      const updatedNoteData = {
-        title: editedTitle,
-        details: editedDetails,
-        idCode: note.idCode,
-        deletedMediaIds: deletedMediaIds.length > 0 ? deletedMediaIds : undefined,
-        ...(newImages.length > 0 && { newImages }),
-        ...(newVideos.length > 0 && { newVideos })
-      };
-
       if (isAuthenticated) {
         // For authenticated user - update via API
         const formData = new FormData();
         formData.append('title', editedTitle);
         formData.append('details', editedDetails || '');
-        formData.append('idCode', note.idCode);
+        formData.append('idCode', note.idCode || note.id);
         
         if (deletedMediaIds.length > 0) {
           formData.append('deletedMediaIds', JSON.stringify(deletedMediaIds));
@@ -223,19 +219,14 @@ const NoteDetailBottomSheet = React.forwardRef(({
           ...note,
           title: editedTitle,
           details: editedDetails,
-          images: [...(note.images || []), ...newImages],
-          videos: [...(note.videos || []), ...newVideos]
+          images: [...(note.images || []).filter((_, index) => 
+            !deletedLocalMedia.some(d => d.mediaIndex === index && d.mediaType === 'image')
+          ), ...newImages],
+          videos: [...(note.videos || []).filter((_, index) => 
+            !deletedLocalMedia.some(d => d.mediaIndex === index && d.mediaType === 'video')
+          ), ...newVideos]
         };
         
-        // Apply local media deletions
-        deletedLocalMedia.forEach(({ mediaIndex, mediaType }) => {
-          if (mediaType === 'image') {
-            updatedNote.images = updatedNote.images.filter((_, i) => i !== mediaIndex);
-          } else if (mediaType === 'video') {
-            updatedNote.videos = updatedNote.videos.filter((_, i) => i !== mediaIndex);
-          }
-        });
-
         // Update local cache
         const cachedNotes = await AsyncStorage.getItem('@notes_cache');
         const notes = cachedNotes ? JSON.parse(cachedNotes) : [];
@@ -311,7 +302,6 @@ const NoteDetailBottomSheet = React.forwardRef(({
             <Image 
               source={{ uri: sourceUri }} 
               style={styles.mediaThumbnail} 
-              onPress={() => openMediaViewer(media, type)}
             />
             <View style={styles.mediaInfo}>
               <Text style={styles.mediaName} numberOfLines={1}>{media.originalName || media.fileName || 'Imagen'}</Text>
@@ -374,7 +364,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
               onPress={() => openMediaViewer(media, type)}
               style={styles.mediaActionIcon}
             />
-            {isEditing && (
+           
               <Ionicons 
                 name="trash-outline" 
                 size={24} 
@@ -387,7 +377,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 )}
                 style={styles.mediaActionIcon}
               />
-            )}
+            
           </>
         )}
       </Pressable>
@@ -433,7 +423,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
       >
         <BottomSheetView style={styles.contentContainerNote}>
           <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%' }}>
-            <View key={note.id} style={styles.detailContainer}>
+            <View style={styles.detailContainer}>
               {isEditing ? (
                 <>
                   <TextInput
@@ -454,18 +444,109 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 <>
                   <Text style={styles.textTitleNote}>{note.title}</Text>
                   <Text style={{ marginBottom: 10, color: COLORS.muted }}>
-                    {note.date || format(note.createdAt,'dd MMMM yyyy' )}
+                    {note.date || format(new Date(note.createdAt),'dd MMMM yyyy' )}
                   </Text>
                   <Text style={styles.detailsText}>{note.details}</Text>
                 </>
               )}
               
-              {/* Rest of the component remains similar but uses 'note' instead of 'selectedNote' */}
-              {/* ... existing media rendering code ... */}
+              {(note.media && note.media.length > 0) || 
+               (note.images && note.images.length > 0) || 
+               (note.videos && note.videos.length > 0) ? (
+                <View>
+                  <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
+                 
+                  {note.media && note.media
+                    .filter(media => media.fileType === 'image')
+                    .map((media, idx) => 
+                      renderMediaItem(media, idx, 'image', false)
+                    )}
+            
+                  {note.media && note.media
+                    .filter(media => media.fileType === 'video')
+                    .map((media, idx) => 
+                      renderMediaItem(media, idx, 'video', false)
+                    )}
+                  
+                  {/* Mostrar imágenes locales */}
+                  {note.images && note.images.map((media, idx) => 
+                    renderMediaItem(media, idx, 'image', true)
+                  )}
+                  
+                  {/* Mostrar videos locales */}
+                  {note.videos && note.videos.map((media, idx) => 
+                    renderMediaItem(media, idx, 'video', true)
+                  )}
+                </View>
+              ) : null}
+              
+              {(newImages.length > 0 || newVideos.length > 0) && (
+                <View style={styles.newMediaContainer}>
+                  <Text style={styles.mediaTitle}>Nuevos archivos por agregar:</Text>
+                  {newImages.map((img, idx) => (
+                    <View key={`new-img-${idx}`} style={styles.mediaItem}>
+                      <Image source={{ uri: img.uri }} style={styles.mediaThumbnail} />
+                      <View style={styles.mediaInfo}>
+                        <Text style={styles.mediaName} numberOfLines={1}>{img.fileName || 'Imagen'}</Text>
+                        <Text style={styles.mediaSize}>
+                          {img.fileSize ? `${(img.fileSize / 1024).toFixed(2)} KB` : 'Tamaño desconocido'}
+                        </Text>
+                        <Text style={styles.newBadge}>Nuevo</Text>
+                      </View>
+                      <Ionicons 
+                        name="trash-outline" 
+                        size={24} 
+                        color="#f44336" 
+                        onPress={() => setNewImages(newImages.filter((_, i) => i !== idx))}
+                        style={styles.mediaActionIcon}
+                      />
+                    </View>
+                  ))}
+                  {newVideos.map((vid, idx) => (
+                    <View key={`new-vid-${idx}`} style={styles.mediaItem}>
+                      <View style={styles.videoThumb}>
+                        <MaterialIcons name="movie" size={30} color={COLORS.primary} />
+                      </View>
+                      <View style={styles.mediaInfo}>
+                        <Text style={styles.mediaName} numberOfLines={1}>{vid.fileName || 'Video'}</Text>
+                        <Text style={styles.mediaSize}>
+                          {vid.fileSize ? `${(vid.fileSize / (1024 * 1024)).toFixed(2)} MB` : 'Tamaño desconocido'}
+                        </Text>
+                        <Text style={styles.newBadge}>Nuevo</Text>
+                      </View>
+                      <Ionicons 
+                        name="trash-outline" 
+                        size={24} 
+                        color="#f44336" 
+                        onPress={() => setNewVideos(newVideos.filter((_, i) => i !== idx))}
+                        style={styles.mediaActionIcon}
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
               
               <View style={styles.buttonRow}>
                 {isEditing ? (
                   <>
+                  {isEditing && (
+  <View style={styles.addMediaButtons}>
+    <TouchableOpacity
+      style={styles.addMediaButton}
+      onPress={pickImage}
+    >
+      <MaterialIcons name="add-a-photo" size={20} color="white" />
+      <Text style={styles.addMediaText}>Agregar Imágenes</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={styles.addMediaButton}
+      onPress={pickVideo}
+    >
+      <MaterialIcons name="movie" size={20} color="white" />
+      <Text style={styles.addMediaText}>Agregar Videos</Text>
+    </TouchableOpacity>
+  </View>
+)}
                     <TouchableOpacity
                       style={[styles.actionButton, styles.saveButton]}
                       onPress={handleSaveChanges}
@@ -499,13 +580,88 @@ const NoteDetailBottomSheet = React.forwardRef(({
                     </TouchableOpacity>
                   </>
                 )}
+                {!isAuthenticated && (
+                  <View style={styles.authWarning}>
+                    <Ionicons name="cloud-offline" size={20} color="#F44336" />
+                    <Text style={styles.authWarningText}>
+                      Nota guardada localmente. Inicia sesión para sincronizar con la nube.
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </BottomSheetScrollView>
         </BottomSheetView>
       </BottomSheetModal>
 
-      {/* Modal for media viewer remains the same */}
+      {isEditing && (
+        <View style={styles.addMediaButtons}>
+          <TouchableOpacity
+            style={styles.addMediaButton}
+            onPress={pickImage}
+          >
+            <MaterialIcons name="add-a-photo" size={20} color="white" />
+            <Text style={styles.addMediaText}>Agregar Imágenes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addMediaButton}
+            onPress={pickVideo}
+          >
+            <MaterialIcons name="movie" size={20} color="white" />
+            <Text style={styles.addMediaText}>Agregar Videos</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeMediaViewer}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton}
+            onPress={closeMediaViewer}
+          >
+            <Ionicons name="close" size={30} color="white" />
+          </TouchableOpacity>
+          
+          {selectedMedia && (
+            <View style={styles.modalContent}>
+              {mediaType === 'image' ? (
+                <Image 
+                  source={{ uri: selectedMedia.uri || 'https://backend-noteeasy-appcrud.onrender.com/' + (selectedMedia.filePath || '') }} 
+                  style={styles.fullMedia} 
+                  resizeMode="contain"
+                />
+              ) : (
+                <Video
+                  source={{ uri: selectedMedia.uri || 'https://backend-noteeasy-appcrud.onrender.com/' + (selectedMedia.filePath || '') }}
+                  style={styles.fullMedia}
+                  useNativeControls
+                  resizeMode="contain"
+                  isLooping
+                />
+              )}
+              
+              <View style={styles.mediaDetails}>
+                <Text style={styles.mediaDetailText}>{selectedMedia.originalName || selectedMedia.fileName || 'Archivo'}</Text>
+                <Text style={styles.mediaDetailText}>
+                  {selectedMedia.fileSize ? (
+                    mediaType === 'image' 
+                      ? `${(selectedMedia.fileSize / 1024).toFixed(2)} KB` 
+                      : `${(selectedMedia.fileSize / (1024 * 1024)).toFixed(2)} MB`
+                  ) : 'Tamaño desconocido'}
+                </Text>
+                {(selectedMedia.uri && !selectedMedia.uri.startsWith('http')) && (
+                  <Text style={styles.localBadgeModal}>Archivo local</Text>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
     </>
   );
 });
@@ -521,7 +677,7 @@ const COLORS = {
 };
 
 const styles = StyleSheet.create({
-    loadingContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -680,7 +836,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: '#9E9E9E',
   },
-  deleteButton: {
+  deleteButtonStyle: {
     backgroundColor: '#f44336',
   },
   actionButtonText: {
@@ -718,38 +874,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   addMediaButtons: {
-  flexDirection: 'row',
-  justifyContent: 'space-around',
-  marginVertical: 15,
-  gap: 20,
-},
-addMediaButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: COLORS.primary,
-  padding: 10,
-  borderRadius: 8,
-},
-addMediaText: {
-  color: 'white',
-  marginLeft: 5,
-  fontSize: 14,
-},
-newMediaContainer: {
-  width: '100%',
-  marginTop: 10,
-  paddingBottom: 20,
-  paddingHorizontal: 10,
-},
-newBadge: {
-  backgroundColor: '#C8E6C9',
-  color: '#2E7D32',
-  padding: 2,
-  borderRadius: 4,
-  fontSize: 10,
-  marginTop: 4,
-  alignSelf: 'flex-start',
-},
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 15,
+    gap: 20,
+  },
+  addMediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    padding: 10,
+    borderRadius: 8,
+  },
+  addMediaText: {
+    color: 'white',
+    marginLeft: 5,
+    fontSize: 14,
+  },
+  newMediaContainer: {
+    width: '100%',
+    marginTop: 10,
+    paddingBottom: 20,
+    paddingHorizontal: 10,
+  },
+  newBadge: {
+    backgroundColor: '#C8E6C9',
+    color: '#2E7D32',
+    padding: 2,
+    borderRadius: 4,
+    fontSize: 10,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
 });
 
 export default NoteDetailBottomSheet;

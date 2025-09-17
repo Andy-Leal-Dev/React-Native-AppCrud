@@ -602,12 +602,28 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
             timeAgo={timeAgo}
           />
 
-         <NoteDetailBottomSheet
+        <NoteDetailBottomSheet
   ref={detailSheetRef}
   onChange={handleSheetChanges}
-  selectedNote={selectedNote}
-  handleDeleteNote={handleDeleteNote}
-  handleUpdateNote={handleUpdateNote} // Nueva prop
+  selectedNoteId={selectedNote?.id}
+  onNoteUpdated={(updatedNote) => {
+    // Update local state
+    const updatedNotes = notes.map(note => 
+      note.id === updatedNote.id ? updatedNote : note
+    );
+    setNotes(updatedNotes);
+    setFilteredNotes(updatedNotes);
+    // Save to cache
+    saveNotesToCache(updatedNotes);
+  }}
+  onNoteDeleted={(deletedNoteId) => {
+    // Remove from local state
+    const updatedNotes = notes.filter(note => note.id !== deletedNoteId);
+    setNotes(updatedNotes);
+    setFilteredNotes(updatedNotes);
+    // Save to cache
+    saveNotesToCache(updatedNotes);
+  }}
   timeAgo={timeAgo}
 />
         </View>

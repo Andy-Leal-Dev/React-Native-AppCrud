@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.NoteEasy"
+      "bundleIdentifier": "com.anonymous.NoteEasy",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -38,6 +41,11 @@
           "photosPermission": "The app accesses your photos to let you share them with your friends."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c42c3ba6-138c-4324-85be-6438df96714e"
+      }
+    }
   }
 }

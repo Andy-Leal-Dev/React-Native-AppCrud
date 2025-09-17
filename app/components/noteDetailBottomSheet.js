@@ -19,6 +19,12 @@ import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { Video } from 'expo-av';
 import { useAuth } from '../providers/AuthContext';
 import { format } from 'date-fns';
+import { notesApi } from '../services/api';
+import { addToSyncQueue, generateUniqueId, copyFileToNotesDir } from '../services/syncServices';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
+
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['60%'],
   onChange,
@@ -162,6 +168,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
               onPress={() => openMediaViewer(media, type)}
               style={styles.mediaActionIcon}
             />
+          
             {isEditing && (
               <Ionicons 
                 name="trash-outline" 
@@ -175,7 +182,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 )}
                 style={styles.mediaActionIcon}
               />
-            )}
+       
           </>
         ) : (
           <>

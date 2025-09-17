@@ -1,32 +1,20 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Pressable
-
-} from "react-native";
+import { View, Text,ScrollView,StyleSheet,TextInput,TouchableOpacity,Pressable} from "react-native";
 import Constants from 'expo-constants';
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { format } from 'date-fns';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import {
-
-  BottomSheetModalProvider,
-
-} from '@gorhom/bottom-sheet';
+import {BottomSheetModalProvider} from '@gorhom/bottom-sheet';
+import es from 'date-fns/locale/es';
 import { useAuth } from '../../providers/AuthContext';
 import { useSync } from '../../providers/SyncContext';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import AddNoteBottomSheet from '../../components/addNoteBottomSheet';
 import NoteDetailBottomSheet from '../../components/noteDetailBottomSheet';
-import {clearSyncQueue, generateUniqueId,loadNotesFromBackend, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
-import api, { notesApi } from "../../services/api";
+import { generateUniqueId, loadNotesFromCache, saveNotesToCache, addToSyncQueue, syncNotesWithBackend,initialSync } from '../../services/syncServices';
+
 
 
 // Directorio para guardar archivos
@@ -86,7 +74,7 @@ const { user, isAuthenticated } = useAuth();
   const [notes, setNotes] = useState([]);
   const [filteredNotes, setFilteredNotes] = useState([]); // Notas filtradas
 
-
+const locale = es; 
 
   // Cargar notas al iniciar
    useEffect(() => {
@@ -230,113 +218,6 @@ const { user, isAuthenticated } = useAuth();
     setVideos([]);
     addNoteSheetRef.current?.close();
 };
-const handleUpdateNote = async (noteId, updatedNoteData) => {
-  try {
-    console.log('Updating note:', updatedNoteData);
-
-    // Si el usuario está autenticado y hay archivos para subir
-    if (user && isAuthenticated && (updatedNoteData.images || updatedNoteData.videos)) {
-      const formData = new FormData();
-      formData.append('title', updatedNoteData.title);
-      formData.append('details', updatedNoteData.details || '');
-      formData.append('idCode', updatedNoteData.idCode);
-      
-      // Agregar medios eliminados si existen
-      if (updatedNoteData.deletedMediaIds) {
-        formData.append('deletedMediaIds', JSON.stringify(updatedNoteData.deletedMediaIds));
-      }
-      
-      // Agregar imágenes
-      if (updatedNoteData.images) {
-        updatedNoteData.images.forEach((image, index) => {
-          formData.append('images', {
-            uri: image.uri,
-            type: image.type || 'image/jpeg',
-            name: image.fileName || `image_${index}.jpg`
-          });
-        });
-      }
-      
-      // Agregar videos
-      if (updatedNoteData.videos) {
-        updatedNoteData.videos.forEach((video, index) => {
-          formData.append('videos', {
-            uri: video.uri,
-            type: video.type || 'video/mp4',
-            name: video.fileName || `video_${index}.mp4`
-          });
-        });
-      }
-      
-      // Realizar la actualización en el backend
-      const response = await notesApi.update(noteId, formData);
-      
-      if (response.status === 200) {
-        // Actualizar el estado local con la respuesta del servidor
-        const updatedNotes = notes.map(note => 
-          note.id === noteId ? { ...note, ...response.data } : note
-        );
-        
-        setNotes(updatedNotes);
-        setFilteredNotes(updatedNotes);
-        await saveNotesToCache(updatedNotes);
-        Alert.alert("Éxito", "Nota actualizada correctamente");
-      }
-    } else {
-      // Para actualizaciones sin archivos o usuario no autenticado
-      const updatedNotes = notes.map(note => 
-        note.id === noteId ? { ...note, ...updatedNoteData } : note
-      );
-      
-      setNotes(updatedNotes);
-      setFilteredNotes(updatedNotes);
-      await saveNotesToCache(updatedNotes);
-      
-      // Si el usuario está autenticado, agregar a la cola de sincronización
-      if (user && isAuthenticated) {
-        await addToSyncQueue(updatedNoteData, 'update');
-        await loadSyncStatus();
-      }
-    }
-  } catch (error) {
-    console.error('Error updating note:', error);
-    Alert.alert("Error", "No se pudo actualizar la nota");
-  }
-};
-
-  // Eliminar archivo
- const handleDeleteNote = async (noteId) => {
-  const noteToDelete = notes.find(note => note.id === noteId);
-
-  if (!noteToDelete) return;
-
-  // Eliminar archivos asociados
-  if (noteToDelete.images) {
-    for (const img of noteToDelete.images) {
-      await deleteFile(img.uri);
-    }
-  }
-  if (noteToDelete.videos) {
-    for (const vid of noteToDelete.videos) {
-      await deleteFile(vid.uri);
-    }
-  }
-
-  const updatedNotes = notes.filter(note => note.id !== noteId);
-  setNotes(updatedNotes);
-  setFilteredNotes(updatedNotes);
-  await saveNotesToCache(updatedNotes);
-  
-  // Si hay usuario autenticado y la nota estaba sincronizada, agregar a cola de eliminación
-  if (user && isAuthenticated && noteToDelete.synced) {
-    await addToSyncQueue(noteToDelete, 'delete');
-    await loadSyncStatus();
-    // Sincronizar inmediatamente la eliminación
-    await syncPendingNotes();
-  }
-  
-  detailSheetRef.current?.close();
-};
 
   // Selección de imágenes
   const pickImage = async () => {
@@ -389,7 +270,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
               justifyContent:'space-between', gap:8}}>
                <View style={{width:'80%'
                }}>
-                 <Text ellipsizeMode="tail" numberOfLines={1}  style={styles.textHeader}>Bienvenido. {user ? user.firstName : ''} </Text>
+                 <Text ellipsizeMode="tail" numberOfLines={1}  style={styles.textHeader}>Bienvenido {user ? user.firstName : ''} </Text>
                </View>
                {
                 user && isAuthenticated? (
@@ -498,7 +379,7 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
 
                       )}
 
-                      <Text style={styles.textCardNote}>{item.date || format(item.createdAt,'dd MMMM yyyy' )}</Text>
+                      <Text style={styles.textCardNote}>{item.date || format(item.createdAt,'dd MMMM yyyy',{locale} )}</Text>
                     
                    
                       {searchQuery.trim() !== '' ? (
@@ -549,12 +430,28 @@ const handleUpdateNote = async (noteId, updatedNoteData) => {
             timeAgo={timeAgo}
           />
 
-         <NoteDetailBottomSheet
+        <NoteDetailBottomSheet
   ref={detailSheetRef}
   onChange={handleSheetChanges}
-  selectedNote={selectedNote}
-  handleDeleteNote={handleDeleteNote}
-  handleUpdateNote={handleUpdateNote} // Nueva prop
+  selectedNoteId={selectedNote?.id}
+  onNoteUpdated={(updatedNote) => {
+    // Update local state
+    const updatedNotes = notes.map(note => 
+      note.id === updatedNote.id ? updatedNote : note
+    );
+    setNotes(updatedNotes);
+    setFilteredNotes(updatedNotes);
+    // Save to cache
+    saveNotesToCache(updatedNotes);
+  }}
+  onNoteDeleted={(deletedNoteId) => {
+    // Remove from local state
+    const updatedNotes = notes.filter(note => note.id !== deletedNoteId);
+    setNotes(updatedNotes);
+    setFilteredNotes(updatedNotes);
+    // Save to cache
+    saveNotesToCache(updatedNotes);
+  }}
   timeAgo={timeAgo}
 />
         </View>

@@ -23,7 +23,14 @@ import { Video } from 'expo-av';
 import { useAuth } from '../providers/AuthContext';
 import { format } from 'date-fns';
 import { notesApi } from '../services/api';
-import { addToSyncQueue, generateUniqueId, copyFileToNotesDir } from '../services/syncServices';
+import { 
+  addToSyncQueue, 
+  generateUniqueId, 
+  copyFileToNotesDir,
+  loadNotesFromCache,
+  saveNotesToCache,
+  deleteFile
+} from '../services/syncServices';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
@@ -50,6 +57,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const [newVideos, setNewVideos] = useState([]);
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isLocalNote, setIsLocalNote] = useState(false);
 
   // Fetch note details when selectedNoteId changes
   useEffect(() => {
@@ -64,20 +72,45 @@ const NoteDetailBottomSheet = React.forwardRef(({
     setLoading(true);
     try {
       // Check if it's a local note (no idCode or starts with local-)
-      if (selectedNoteId) {
-        // Load from local cache
-        const cachedNotes = await AsyncStorage.getItem('@notes_cache');
-        const notes = cachedNotes ? JSON.parse(cachedNotes) : [];
-        const localNote = notes.find(n => n.id === selectedNoteId);
+      const cachedNotes = await loadNotesFromCache();
+      const localNote = cachedNotes.find(n => 
+        n.id === selectedNoteId || n.idCode === selectedNoteId
+      );
+
+      if (localNote && (!localNote.synced || localNote.synced === 0)) {
+        // It's a local note
         setNote(localNote);
+        setIsLocalNote(true);
         setEditedTitle(localNote.title);
         setEditedDetails(localNote.details || '');
+      } else if (localNote && localNote.synced === 1) {
+        // It's a synced note, try to fetch from backend first
+        try {
+          const response = await notesApi.getById(localNote.id);
+          setNote(response.data);
+          setIsLocalNote(false);
+          setEditedTitle(response.data.title);
+          setEditedDetails(response.data.details || '');
+        } catch (error) {
+          console.error('Error fetching from backend, using cached version:', error);
+          // Fallback to cached version
+          setNote(localNote);
+          setIsLocalNote(false);
+          setEditedTitle(localNote.title);
+          setEditedDetails(localNote.details || '');
+        }
       } else {
-        // Fetch from backend
-        const response = await notesApi.getById(selectedNoteId);
-        setNote(response.data);
-        setEditedTitle(response.data.title);
-        setEditedDetails(response.data.details || '');
+        // Try to fetch from backend
+        try {
+          const response = await notesApi.getById(selectedNoteId);
+          setNote(response.data);
+          setIsLocalNote(false);
+          setEditedTitle(response.data.title);
+          setEditedDetails(response.data.details || '');
+        } catch (error) {
+          console.error('Error fetching note from backend:', error);
+          Alert.alert('Error', 'No se pudo cargar la nota');
+        }
       }
     } catch (error) {
       console.error('Error fetching note details:', error);
@@ -101,7 +134,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
 
   const handleDeleteMedia = async (mediaId, isLocal = false, mediaIndex, mediaType) => {
     if (isLocal) {
-      // For local media
+      // For local media - just remove from UI state
       const updatedNote = { ...note };
       if (mediaType === 'image') {
         updatedNote.images = updatedNote.images.filter((_, i) => i !== mediaIndex);
@@ -111,14 +144,27 @@ const NoteDetailBottomSheet = React.forwardRef(({
       setNote(updatedNote);
       setDeletedLocalMedia([...deletedLocalMedia, { mediaIndex, mediaType }]);
     } else {
-      // For backend media
+      // For backend media - mark for deletion
       setDeletedMediaIds([...deletedMediaIds, mediaId]);
+      
+      // Remove from UI immediately
+      const updatedNote = { ...note };
+      if (mediaType === 'image') {
+        updatedNote.media = updatedNote.media.filter(media => 
+          !(media.id === mediaId && media.fileType === 'image')
+        );
+      } else if (mediaType === 'video') {
+        updatedNote.media = updatedNote.media.filter(media => 
+          !(media.id === mediaId && media.fileType === 'video')
+        );
+      }
+      setNote(updatedNote);
     }
   };
 
   const handleCancelEdit = () => {
-    setEditedTitle(note.title);
-    setEditedDetails(note.details || '');
+    // Reload original note data
+    fetchNoteDetails();
     setDeletedMediaIds([]);
     setDeletedLocalMedia([]);
     setNewImages([]);
@@ -172,13 +218,14 @@ const NoteDetailBottomSheet = React.forwardRef(({
     if (!note) return;
     
     try {
-      if (isAuthenticated) {
+      if (isAuthenticated && !isLocalNote) {
         // For authenticated user - update via API
         const formData = new FormData();
         formData.append('title', editedTitle);
         formData.append('details', editedDetails || '');
         formData.append('idCode', note.idCode || note.id);
         
+        // Add deleted media IDs
         if (deletedMediaIds.length > 0) {
           formData.append('deletedMediaIds', JSON.stringify(deletedMediaIds));
         }
@@ -210,11 +257,21 @@ const NoteDetailBottomSheet = React.forwardRef(({
         const response = await notesApi.update(note.id, formData);
         
         if (response.status === 200 || response.status === 302) {
+          // Update local cache with the new data
+          const cachedNotes = await loadNotesFromCache();
+          const updatedNotes = cachedNotes.map(n => 
+            n.id === note.id ? { ...response.data, synced: 1 } : n
+          );
+          await saveNotesToCache(updatedNotes);
+          
           Alert.alert("Éxito", "Nota actualizada correctamente");
-          onNoteUpdated(response.data);
+          onNoteUpdated({ ...response.data, synced: 1 });
+          
+          // Refresh the note details
+          fetchNoteDetails();
         }
       } else {
-        // For unauthenticated user - update locally
+        // For unauthenticated user or local note - update locally
         const updatedNote = {
           ...note,
           title: editedTitle,
@@ -224,22 +281,34 @@ const NoteDetailBottomSheet = React.forwardRef(({
           ), ...newImages],
           videos: [...(note.videos || []).filter((_, index) => 
             !deletedLocalMedia.some(d => d.mediaIndex === index && d.mediaType === 'video')
-          ), ...newVideos]
+          ), ...newVideos],
+          synced: isAuthenticated ? 1 : 0
         };
-        
+
         // Update local cache
-        const cachedNotes = await AsyncStorage.getItem('@notes_cache');
-        const notes = cachedNotes ? JSON.parse(cachedNotes) : [];
-        const updatedNotes = notes.map(n => 
+        const cachedNotes = await loadNotesFromCache();
+        const updatedNotes = cachedNotes.map(n => 
           n.id === note.id ? updatedNote : n
         );
-        await AsyncStorage.setItem('@notes_cache', JSON.stringify(updatedNotes));
+        await saveNotesToCache(updatedNotes);
+        
+        // If user is authenticated but note was local, add to sync queue
+        if (isAuthenticated && isLocalNote) {
+          await addToSyncQueue(updatedNote, 'create');
+        } else if (isAuthenticated) {
+          await addToSyncQueue(updatedNote, 'update');
+        }
         
         Alert.alert(
-          "Cambios guardados localmente",
-          "Los cambios se han guardado en tu dispositivo. Inicia sesión para sincronizarlos con la nube.",
+          isAuthenticated ? "Cambios guardados" : "Cambios guardados localmente",
+          isAuthenticated ? 
+            "Nota actualizada correctamente" : 
+            "Los cambios se han guardado en tu dispositivo. Inicia sesión para sincronizarlos con la nube.",
           [{ text: "Entendido" }]
         );
+        
+        // Update local state and refresh
+        setNote(updatedNote);
         onNoteUpdated(updatedNote);
       }
       
@@ -259,34 +328,70 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const handleDeleteNote = async () => {
     if (!note) return;
     
+    Alert.alert(
+      "Eliminar nota",
+      "¿Estás seguro de que quieres eliminar esta nota?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Eliminar", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (isAuthenticated && !isLocalNote) {
+                // Delete from backend
+                await notesApi.delete(note.id);
+                
+                // Also remove from local cache
+                const cachedNotes = await loadNotesFromCache();
+                const updatedNotes = cachedNotes.filter(n => n.id !== note.id);
+                await saveNotesToCache(updatedNotes);
+                
+                Alert.alert("Éxito", "Nota eliminada correctamente");
+              } else {
+                // Delete locally and from sync queue if needed
+                const cachedNotes = await loadNotesFromCache();
+                const updatedNotes = cachedNotes.filter(n => n.id !== note.id);
+                await saveNotesToCache(updatedNotes);
+                
+                // If note was synced, add to delete queue
+                if (note.synced === 1) {
+                  await addToSyncQueue(note, 'delete');
+                }
+                
+                Alert.alert(
+                  isLocalNote ? "Nota eliminada localmente" : "Nota eliminada",
+                  isLocalNote ? 
+                    "La nota se ha eliminado de tu dispositivo." :
+                    "Nota eliminada correctamente.",
+                  [{ text: "Entendido" }]
+                );
+              }
+              
+              onNoteDeleted(note.id);
+              ref.current?.dismiss();
+              
+            } catch (error) {
+              console.error('Error deleting note:', error);
+              Alert.alert("Error", "No se pudo eliminar la nota");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const deleteMediaFromBackend = async (mediaId) => {
     try {
-      if (isAuthenticated) {
-        // Delete from backend
-        await notesApi.delete(note.id);
-        Alert.alert("Éxito", "Nota eliminada correctamente");
-      } else {
-        // Delete locally
-        const cachedNotes = await AsyncStorage.getItem('@notes_cache');
-        const notes = cachedNotes ? JSON.parse(cachedNotes) : [];
-        const updatedNotes = notes.filter(n => n.id !== note.id);
-        await AsyncStorage.setItem('@notes_cache', JSON.stringify(updatedNotes));
-        
-        Alert.alert(
-          "Nota eliminada localmente",
-          "La nota se ha eliminado de tu dispositivo. Inicia sesión para sincronizar los cambios.",
-          [{ text: "Entendido" }]
-        );
-      }
-      
-      onNoteDeleted(note.id);
-      ref.current?.dismiss();
-      
+      await notesApi.deleteMedia(mediaId);
+      return true;
     } catch (error) {
-      console.error('Error deleting note:', error);
-      Alert.alert("Error", "No se pudo eliminar la nota");
+      console.error('Error deleting media from backend:', error);
+      return false;
     }
   };
 
+  
   const renderMediaItem = (media, idx, type, isLocal = false) => {
     const isLocalMedia = isLocal || (media.uri && !media.uri.startsWith('http'));
     const sourceUri = isLocalMedia ? media.uri : 'https://backend-noteeasy-appcrud.onrender.com/' + (media.filePath || '');
@@ -365,6 +470,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
               style={styles.mediaActionIcon}
             />
            
+            {isEditing && (
               <Ionicons 
                 name="trash-outline" 
                 size={24} 
@@ -377,7 +483,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 )}
                 style={styles.mediaActionIcon}
               />
-            
+            )}
           </>
         )}
       </Pressable>
@@ -413,6 +519,7 @@ const NoteDetailBottomSheet = React.forwardRef(({
     );
   }
 
+ 
   return (
     <>
       <BottomSheetModal
@@ -424,6 +531,26 @@ const NoteDetailBottomSheet = React.forwardRef(({
         <BottomSheetView style={styles.contentContainerNote}>
           <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%' }}>
             <View style={styles.detailContainer}>
+              {/* Sync status indicator */}
+              <View style={styles.syncStatusContainer}>
+                {isLocalNote ? (
+                  <View style={[styles.statusBadge, styles.localBadge]}>
+                    <Ionicons name="cloud-offline" size={16} color="#F44336" />
+                    <Text style={styles.statusText}>Local</Text>
+                  </View>
+                ) : note.synced === 1 ? (
+                  <View style={[styles.statusBadge, styles.syncedBadge]}>
+                    <Ionicons name="cloud-done" size={16} color="#4CAF50" />
+                    <Text style={styles.statusText}>Sincronizado</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.statusBadge, styles.pendingBadge]}>
+                    <Ionicons name="sync" size={16} color="#FF9800" />
+                    <Text style={styles.statusText}>Pendiente</Text>
+                  </View>
+                )}
+              </View>
+
               {isEditing ? (
                 <>
                   <TextInput
@@ -450,36 +577,40 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 </>
               )}
               
+              {/* Media sections */}
               {(note.media && note.media.length > 0) || 
                (note.images && note.images.length > 0) || 
                (note.videos && note.videos.length > 0) ? (
                 <View>
                   <Text style={styles.mediaTitle}>Archivos adjuntos:</Text>
                  
+                  {/* Backend images */}
                   {note.media && note.media
                     .filter(media => media.fileType === 'image')
                     .map((media, idx) => 
                       renderMediaItem(media, idx, 'image', false)
                     )}
             
+                  {/* Backend videos */}
                   {note.media && note.media
                     .filter(media => media.fileType === 'video')
                     .map((media, idx) => 
                       renderMediaItem(media, idx, 'video', false)
                     )}
                   
-                  {/* Mostrar imágenes locales */}
+                  {/* Local images */}
                   {note.images && note.images.map((media, idx) => 
                     renderMediaItem(media, idx, 'image', true)
                   )}
                   
-                  {/* Mostrar videos locales */}
+                  {/* Local videos */}
                   {note.videos && note.videos.map((media, idx) => 
                     renderMediaItem(media, idx, 'video', true)
                   )}
                 </View>
               ) : null}
               
+              {/* New media to be added */}
               {(newImages.length > 0 || newVideos.length > 0) && (
                 <View style={styles.newMediaContainer}>
                   <Text style={styles.mediaTitle}>Nuevos archivos por agregar:</Text>
@@ -526,27 +657,29 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 </View>
               )}
               
+              {/* Add media buttons (only in edit mode) */}
+              {isEditing && (
+                <View style={styles.addMediaButtons}>
+                  <TouchableOpacity
+                    style={styles.addMediaButton}
+                    onPress={pickImage}
+                  >
+                    <MaterialIcons name="add-a-photo" size={20} color="white" />
+                    <Text style={styles.addMediaText}>Agregar Imágenes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.addMediaButton}
+                    onPress={pickVideo}
+                  >
+                    <MaterialIcons name="movie" size={20} color="white" />
+                    <Text style={styles.addMediaText}>Agregar Videos</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
               <View style={styles.buttonRow}>
                 {isEditing ? (
                   <>
-                  {isEditing && (
-  <View style={styles.addMediaButtons}>
-    <TouchableOpacity
-      style={styles.addMediaButton}
-      onPress={pickImage}
-    >
-      <MaterialIcons name="add-a-photo" size={20} color="white" />
-      <Text style={styles.addMediaText}>Agregar Imágenes</Text>
-    </TouchableOpacity>
-    <TouchableOpacity
-      style={styles.addMediaButton}
-      onPress={pickVideo}
-    >
-      <MaterialIcons name="movie" size={20} color="white" />
-      <Text style={styles.addMediaText}>Agregar Videos</Text>
-    </TouchableOpacity>
-  </View>
-)}
                     <TouchableOpacity
                       style={[styles.actionButton, styles.saveButton]}
                       onPress={handleSaveChanges}
@@ -580,39 +713,21 @@ const NoteDetailBottomSheet = React.forwardRef(({
                     </TouchableOpacity>
                   </>
                 )}
-                {!isAuthenticated && (
-                  <View style={styles.authWarning}>
-                    <Ionicons name="cloud-offline" size={20} color="#F44336" />
-                    <Text style={styles.authWarningText}>
-                      Nota guardada localmente. Inicia sesión para sincronizar con la nube.
-                    </Text>
-                  </View>
-                )}
               </View>
+              
+              {!isAuthenticated && (
+                <View style={styles.authWarning}>
+                  <Ionicons name="cloud-offline" size={20} color="#F44336" />
+                  <Text style={styles.authWarningText}>
+                    Nota guardada localmente. Inicia sesión para sincronizar con la nube.
+                  </Text>
+                </View>
+              )}
             </View>
           </BottomSheetScrollView>
         </BottomSheetView>
       </BottomSheetModal>
 
-      {isEditing && (
-        <View style={styles.addMediaButtons}>
-          <TouchableOpacity
-            style={styles.addMediaButton}
-            onPress={pickImage}
-          >
-            <MaterialIcons name="add-a-photo" size={20} color="white" />
-            <Text style={styles.addMediaText}>Agregar Imágenes</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.addMediaButton}
-            onPress={pickVideo}
-          >
-            <MaterialIcons name="movie" size={20} color="white" />
-            <Text style={styles.addMediaText}>Agregar Videos</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      
       <Modal
         animationType="fade"
         transparent={true}
@@ -677,6 +792,31 @@ const COLORS = {
 };
 
 const styles = StyleSheet.create({
+    syncStatusContainer: {
+    marginBottom: 15,
+    alignItems: 'flex-start',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+    borderRadius: 12,
+    marginBottom: 5,
+  },
+  localBadge: {
+    backgroundColor: '#FFEBEE',
+  },
+  syncedBadge: {
+    backgroundColor: '#E8F5E8',
+  },
+  pendingBadge: {
+    backgroundColor: '#FFF3E0',
+  },
+  statusText: {
+    marginLeft: 4,
+    fontSize: 12,
+    fontWeight: '500',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../services/api';
 
 const AuthContext = createContext();
-
+const NOTES_CACHE_KEY = '@notes_cache';
+const SYNC_QUEUE_KEY = '@sync_queue';
+const ID_CODE_MAP_KEY = '@id_code_map';
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -96,7 +98,9 @@ export const AuthProvider = ({ children }) => {
     try {
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userData');
-      
+      await AsyncStorage.removeItem(NOTES_CACHE_KEY);
+      await AsyncStorage.removeItem(SYNC_QUEUE_KEY);
+      await AsyncStorage.removeItem(ID_CODE_MAP_KEY);
       setToken(null);
       setUser(null);
       setIsAuthenticated(false); // Asegurar que se establece como no autenticado

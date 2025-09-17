@@ -425,7 +425,7 @@ const locale = es;
         key={mediaId} 
         style={styles.mediaItem}
       >
-        {type === 'image' ? (
+        {type === 'image'  ? (
           <>
             <Image 
               source={{ uri: sourceUri }} 
@@ -493,12 +493,12 @@ const locale = es;
               style={styles.mediaActionIcon}
             />
            
-            {isEditing && (
+            
               <Ionicons 
                 name="trash-outline" 
                 size={24} 
                 color="#f44336" 
-                onPress={() => handleDeleteMedia(
+                onPress={() => deleteMediaFromBackend(
                   media.id, 
                   isLocalMedia, 
                   idx, 
@@ -506,7 +506,7 @@ const locale = es;
                 )}
                 style={styles.mediaActionIcon}
               />
-            )}
+            
           </>
         )}
       </Pressable>

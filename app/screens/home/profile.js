@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView } from "react-native";
+import {  ToastAndroid, View, Text, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView } from "react-native";
 import Constants from 'expo-constants';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -11,6 +11,10 @@ export default function ProfileScreen({ navigation }) {
   const handleLogout = async () => {
     const result = await logout();
     if (result.success) {
+      ToastAndroid.showWithGravity("Se cerro sesion ",
+      ToastAndroid.SHORT,
+      ToastAndroid.CENTER,
+)
      navigation.navigate('Home');
     }
   };

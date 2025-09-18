@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
+import {ToastAndroid,
   View,
   Text,
   TouchableOpacity,
@@ -112,12 +112,20 @@ const locale = es;
           setEditedDetails(response.data.details || '');
         } catch (error) {
           console.error('Error fetching note from backend:', error);
-          Alert.alert('Error', 'No se pudo cargar la nota');
+          ToastAndroid.showWithGravity('Error. No se pudo cargar la nota',
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
+         
         }
       }
     } catch (error) {
       console.error('Error fetching note details:', error);
-      Alert.alert('Error', 'No se pudo cargar la nota');
+        ToastAndroid.showWithGravity('Error. No se pudo cargar la nota',
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
+         
     } finally {
       setLoading(false);
     }
@@ -278,8 +286,11 @@ const locale = es;
             n.id === note.id ? { ...response.data, synced: 1 } : n
           );
           await saveNotesToCache(updatedNotes);
-          
-          Alert.alert("Éxito", "Nota actualizada correctamente");
+            ToastAndroid.showWithGravity("Éxito. Nota actualizada correctamente",
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
+         
           onNoteUpdated({ ...response.data, synced: 1 });
           
       
@@ -335,7 +346,11 @@ const locale = es;
       
     } catch (error) {
       console.error('Error saving changes:', error);
-      Alert.alert("Error", "No se pudo guardar los cambios");
+      ToastAndroid.showWithGravity("Error. No se pudo guardar los cambios",
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
+      
     }
   };
 
@@ -360,8 +375,11 @@ const locale = es;
                 const cachedNotes = await loadNotesFromCache();
                 const updatedNotes = cachedNotes.filter(n => n.id !== note.id);
                 await saveNotesToCache(updatedNotes);
-                
-                Alert.alert("Éxito", "Nota eliminada correctamente");
+                ToastAndroid.showWithGravity("Éxito. Nota eliminada correctamente",
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
+             
               } else {
                 // Delete locally and from sync queue if needed
                 const cachedNotes = await loadNotesFromCache();
@@ -387,7 +405,11 @@ const locale = es;
               
             } catch (error) {
               console.error('Error deleting note:', error);
-              Alert.alert("Error", "No se pudo eliminar la nota");
+               ToastAndroid.showWithGravity("Error.No se pudo eliminar la nota",
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
+          
             }
           }
         }
@@ -402,7 +424,16 @@ const locale = es;
         {text: "Eliminar archivo", onPress:async()=>{
             const response = await notesApi.deleteMedia(mediaId);
       if(response.status== 200 || response.status ==201){
+        ToastAndroid.showWithGravity("Se eliminio el archivo exitosamente",
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
         fetchNoteDetails();
+      }else{
+        ToastAndroid.showWithGravity("Hubo un problema al eliminar el archivo",
+              ToastAndroid.SHORT,
+              ToastAndroid.CENTER,
+        )
       }
         }}
       ])

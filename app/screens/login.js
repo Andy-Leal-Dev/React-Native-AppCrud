@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Platform,Keyboard,TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, TouchableWithoutFeedback } from 'react-native';
+import { ToastAndroid, View, Text, Platform,Keyboard,TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, TouchableWithoutFeedback } from 'react-native';
 import logo from '../../assets/logoBg.png';
 import { ScrollView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
@@ -27,7 +27,10 @@ export default function LoginScreen({ navigation }) {
             await AsyncStorage.setItem('userToken', response.data.token);
             await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
             await checkAuthStatus();
-            // Navegar a la pantalla principal
+            ToastAndroid.showWithGravity("Se inicio sesion exitosamente",
+      ToastAndroid.SHORT,
+      ToastAndroid.CENTER,
+)
             navigation.navigate('Home');    
         } catch (error) {
             console.error('Login error:', error);

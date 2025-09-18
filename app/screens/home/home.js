@@ -18,6 +18,7 @@ import {
   BottomSheetModalProvider,
 
 } from '@gorhom/bottom-sheet';
+import NetInfo from '@react-native-community/netinfo';
 import es from 'date-fns/locale/es';
 import { useAuth } from '../../providers/AuthContext';
 import { useSync } from '../../providers/SyncContext';
@@ -119,24 +120,37 @@ const locale = es;
   }, [isAuthenticated, pendingSyncCount]);
 
 
-// En home.js, mejorar syncPendingNotes
- const syncPendingNotes = async () => {
-    const result = await performSync();
-    
-    if (result.success) {
-      // Recargar las notas después de la sincronización exitosa
-      const cachedNotes = await loadNotesFromCache();
-      setNotes(cachedNotes);
-      setFilteredNotes(cachedNotes);
-    } else {
-      console.error('Sync failed:', result.error);
-      console.log(result)
-      // Mantener las notas locales actuales
-      const cachedNotes = await loadNotesFromCache();
-      setNotes(cachedNotes);
-      setFilteredNotes(cachedNotes);
-    }
-  };
+// En tu HomeScreen, modifica la función syncPendingNotes
+const syncPendingNotes = async () => {
+  // Verificar conexión antes de intentar sincronizar
+  const networkState = await NetInfo.fetch();
+  
+  if (!networkState.isConnected) {
+    Alert.alert(
+      "Sin conexión",
+      "No hay conexión a internet. La sincronización se realizará cuando recuperes la conexión.",
+      [{ text: "Entendido" }]
+    );
+    return { success: false, error: "No internet connection" };
+  }
+  
+  const result = await performSync();
+  
+  if (result.success) {
+    // Recargar las notas después de la sincronización exitosa
+    const cachedNotes = await loadNotesFromCache();
+    setNotes(cachedNotes);
+    setFilteredNotes(cachedNotes);
+  } else {
+    console.error('Sync failed:', result.error);
+    // Mantener las notas locales actuales
+    const cachedNotes = await loadNotesFromCache();
+    setNotes(cachedNotes);
+    setFilteredNotes(cachedNotes);
+  }
+  
+  return result;
+};
   // Agregar botón de sincronización manual
 
   useEffect(() => {
@@ -230,165 +244,6 @@ const locale = es;
     setImages([]);
     setVideos([]);
     addNoteSheetRef.current?.close();
-};
-// Mejorar la función handleUpdateNote para manejar nuevos archivos
-const handleUpdateNote = async (noteId, updatedNoteData) => {
-  try {
-    console.log('Updating note:', updatedNoteData);
-
-    // Si hay nuevos archivos, copiarlos al directorio de notas
-    let finalNewImages = [];
-    let finalNewVideos = [];
-    
-    if (updatedNoteData.newImages && updatedNoteData.newImages.length > 0) {
-      for (const img of updatedNoteData.newImages) {
-        const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-        const newPath = await copyFileToNotesDir(img.uri, fileName);
-        finalNewImages.push({
-          uri: newPath,
-          fileName: fileName,
-          fileSize: img.fileSize || 0,
-          type: 'image/jpeg',
-          addedAt: new Date(),
-        });
-      }
-    }
-    
-    if (updatedNoteData.newVideos && updatedNoteData.newVideos.length > 0) {
-      for (const vid of updatedNoteData.newVideos) {
-        const fileName = `video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
-        const newPath = await copyFileToNotesDir(vid.uri, fileName);
-        finalNewVideos.push({
-          uri: newPath,
-          fileName: fileName,
-          fileSize: vid.fileSize || 0,
-          type: 'video/mp4',
-          addedAt: new Date(),
-        });
-      }
-    }
-
-    // Si el usuario está autenticado
-    if (user && isAuthenticated) {
-      const formData = new FormData();
-      formData.append('title', updatedNoteData.title);
-      formData.append('details', updatedNoteData.details || '');
-      formData.append('idCode', updatedNoteData.idCode);
-      
-      // Agregar medios eliminados si existen
-      if (updatedNoteData.deletedMediaIds) {
-        formData.append('deletedMediaIds', JSON.stringify(updatedNoteData.deletedMediaIds));
-      }
-      
-      // Agregar nuevas imágenes
-      if (finalNewImages.length > 0) {
-        finalNewImages.forEach((image, index) => {
-          formData.append('images', {
-            uri: image.uri,
-            type: image.type || 'image/jpeg',
-            name: image.fileName || `image_${index}.jpg`
-          });
-        });
-      }
-      
-      // Agregar nuevos videos
-      if (finalNewVideos.length > 0) {
-        finalNewVideos.forEach((video, index) => {
-          formData.append('videos', {
-            uri: video.uri,
-            type: video.type || 'video/mp4',
-            name: video.fileName || `video_${index}.mp4`
-          });
-        });
-      }
-      
-      // Realizar la actualización en el backend
-      const response = await notesApi.update(noteId, formData);
-      
-      if (response.status === 200) {
-        // Actualizar el estado local
-        const updatedNotes = notes.map(note => {
-          if (note.id === noteId) {
-            return {
-              ...note,
-              ...response.data,
-              // Combinar imágenes y videos existentes con los nuevos
-              images: [...(note.images || []), ...finalNewImages],
-              videos: [...(note.videos || []), ...finalNewVideos]
-            };
-          }
-          return note;
-        });
-        
-        setNotes(updatedNotes);
-        setFilteredNotes(updatedNotes);
-        await saveNotesToCache(updatedNotes);
-        Alert.alert("Éxito", "Nota actualizada correctamente");
-      }
-    } else {
-      // Para usuario no autenticado
-      const updatedNotes = notes.map(note => {
-        if (note.id === noteId) {
-          return {
-            ...note,
-            title: updatedNoteData.title,
-            details: updatedNoteData.details,
-            // Combinar imágenes y videos existentes con los nuevos
-            images: [...(note.images || []), ...finalNewImages],
-            videos: [...(note.videos || []), ...finalNewVideos]
-          };
-        }
-        return note;
-      });
-      
-      setNotes(updatedNotes);
-      setFilteredNotes(updatedNotes);
-      await saveNotesToCache(updatedNotes);
-      
-      Alert.alert(
-        "Cambios guardados localmente",
-        "Los cambios se han guardado en tu dispositivo. Inicia sesión para sincronizarlos con la nube.",
-        [{ text: "Entendido" }]
-      );
-    }
-  } catch (error) {
-    console.error('Error updating note:', error);
-    Alert.alert("Error", "No se pudo actualizar la nota");
-  }
-};
-
-  // Eliminar archivo
- const handleDeleteNote = async (noteId) => {
-  const noteToDelete = notes.find(note => note.id === noteId);
-
-  if (!noteToDelete) return;
-
-  // Eliminar archivos asociados
-  if (noteToDelete.images) {
-    for (const img of noteToDelete.images) {
-      await deleteFile(img.uri);
-    }
-  }
-  if (noteToDelete.videos) {
-    for (const vid of noteToDelete.videos) {
-      await deleteFile(vid.uri);
-    }
-  }
-
-  const updatedNotes = notes.filter(note => note.id !== noteId);
-  setNotes(updatedNotes);
-  setFilteredNotes(updatedNotes);
-  await saveNotesToCache(updatedNotes);
-  
-  // Si hay usuario autenticado y la nota estaba sincronizada, agregar a cola de eliminación
-  if (user && isAuthenticated && noteToDelete.synced) {
-    await addToSyncQueue(noteToDelete, 'delete');
-    await loadSyncStatus();
-    // Sincronizar inmediatamente la eliminación
-    await syncPendingNotes();
-  }
-  
-  detailSheetRef.current?.close();
 };
 
   // Selección de imágenes

@@ -36,7 +36,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyFileToNotesDir} from '../utils/fileUtils';
 import { el } from 'date-fns/locale';
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
-
+import NetInfo from '@react-native-community/netinfo';
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['80%'],
   onChange,
@@ -60,12 +60,23 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isLocalNote, setIsLocalNote] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 const locale = es; 
   // Fetch note details when selectedNoteId changes
   useEffect(() => {
     if (selectedNoteId) {
       fetchNoteDetails();
     }
+      const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected);
+    });
+
+    // Verificar conexión inicial
+    NetInfo.fetch().then(state => {
+      setIsConnected(state.isConnected);
+    });
+
+    return () => unsubscribe();
   }, [selectedNoteId]);
 
   const fetchNoteDetails = async () => {
@@ -229,7 +240,11 @@ const locale = es;
     if (!note) return;
     
     try {
-      if (isAuthenticated && !isLocalNote) {
+            // Verificar conexión a internet
+      const networkState = await NetInfo.fetch();
+      const hasInternet = networkState.isConnected;
+
+      if (hasInternet && isAuthenticated && !isLocalNote) {
         // For authenticated user - update via API
         const formData = new FormData();
         if(editedTitle !== null && editedTitle !== note.title){
@@ -297,7 +312,7 @@ const locale = es;
         }
       } else {
         // For unauthenticated user or local note - update locally
-        const updatedNote = {
+       const updatedNote = {
           ...note,
           title: editedTitle,
           details: editedDetails,
@@ -307,7 +322,8 @@ const locale = es;
           videos: [...(note.videos || []).filter((_, index) => 
             !deletedLocalMedia.some(d => d.mediaIndex === index && d.mediaType === 'video')
           ), ...newVideos],
-          synced: isAuthenticated ? 1 : 0
+          synced: hasInternet && isAuthenticated ? 1 : 0, // Marcar como no sincronizado si no hay internet
+          pendingSync: true // Nueva bandera para indicar que necesita sincronización
         };
 
         // Update local cache
@@ -316,7 +332,9 @@ const locale = es;
           n.id === note.id ? updatedNote : n
         );
         await saveNotesToCache(updatedNotes);
-        
+        if (isAuthenticated && !hasInternet) {
+          await addToSyncQueue(updatedNote, isLocalNote ? 'create' : 'update');
+        }
         // If user is authenticated but note was local, add to sync queue
         if (isAuthenticated && isLocalNote) {
           await addToSyncQueue(updatedNote, 'create');
@@ -367,7 +385,9 @@ const locale = es;
           style: "destructive",
           onPress: async () => {
             try {
-              if (isAuthenticated && !isLocalNote) {
+                     const networkState = await NetInfo.fetch();
+              const hasInternet = networkState.isConnected;
+              if (hasInternet && isAuthenticated && !isLocalNote) {
                 // Delete from backend
                 await notesApi.delete(note.id);
                 
@@ -584,6 +604,12 @@ const locale = es;
         enablePanDownToClose={enablePanDownToClose}
       >
         <BottomSheetView style={styles.contentContainerNote}>
+           {!isConnected && (
+            <View style={styles.offlineIndicator}>
+              <Ionicons name="cloud-offline" size={16} color="white" />
+              <Text style={styles.offlineText}>Sin conexión - Modo offline</Text>
+            </View>
+          )}
           <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%' }}>
             <View style={styles.detailContainer}>
               {/* Sync status indicator */}
@@ -1101,6 +1127,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 4,
     alignSelf: 'flex-start',
+  },
+    offlineIndicator: {
+    backgroundColor: '#F44336',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  offlineText: {
+    color: 'white',
+    marginLeft: 5,
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

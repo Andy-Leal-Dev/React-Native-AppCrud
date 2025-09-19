@@ -27,16 +27,18 @@ import { notesApi } from '../services/api';
 import { 
   addToSyncQueue, 
   generateUniqueId, 
-
   loadNotesFromCache,
   saveNotesToCache,
   deleteFile
 } from '../services/syncServices';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { copyFileToNotesDir} from '../utils/fileUtils';
-import { el } from 'date-fns/locale';
+import { copyFileToNotesDir, calculateFileHash } from '../utils/fileUtils';
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
 import NetInfo from '@react-native-community/netinfo';
+
+// Nuevo: Almacén para control de sincronización en curso
+const syncInProgress = new Set();
+
 const NoteDetailBottomSheet = React.forwardRef(({
   snapPoints = ['80%'],
   onChange,
@@ -61,7 +63,9 @@ const NoteDetailBottomSheet = React.forwardRef(({
   const [loading, setLoading] = useState(false);
   const [isLocalNote, setIsLocalNote] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
-const locale = es; 
+  const [isSyncing, setIsSyncing] = useState(false); // Nuevo: estado de sincronización
+  const locale = es; 
+
   // Fetch note details when selectedNoteId changes
   useEffect(() => {
     if (selectedNoteId) {
@@ -126,8 +130,7 @@ const locale = es;
           ToastAndroid.showWithGravity('Error. No se pudo cargar la nota',
               ToastAndroid.SHORT,
               ToastAndroid.CENTER,
-        )
-         
+          )
         }
       }
     } catch (error) {
@@ -136,9 +139,60 @@ const locale = es;
               ToastAndroid.SHORT,
               ToastAndroid.CENTER,
         )
-         
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Nuevo: Función para verificar si un archivo ya existe en la nota
+  const isMediaAlreadyInNote = async (fileUri, fileType) => {
+    if (!note) return false;
+    
+    try {
+      const newFileHash = await calculateFileHash(fileUri);
+      
+      // Verificar en medios existentes de la nota
+      const allMedia = [
+        ...(note.media || []),
+        ...(note.images || []).map(img => ({ ...img, fileType: 'image' })),
+        ...(note.videos || []).map(vid => ({ ...vid, fileType: 'video' }))
+      ];
+      
+      for (const media of allMedia) {
+        let existingHash;
+        
+        if (media.fileHash) {
+          // Si ya tenemos el hash almacenado
+          existingHash = media.fileHash;
+        } else if (media.uri) {
+          // Calcular hash para medios locales
+          existingHash = await calculateFileHash(media.uri);
+        }
+        
+        if (existingHash === newFileHash) {
+          return true;
+        }
+      }
+      
+      // Verificar en nuevos medios ya agregados
+      const newMedia = [
+        ...newImages.map(img => ({ ...img, fileType: 'image' })),
+        ...newVideos.map(vid => ({ ...vid, fileType: 'video' }))
+      ];
+      
+      for (const media of newMedia) {
+        if (media.uri === fileUri) continue; // Saltar el mismo archivo
+        
+        const mediaHash = await calculateFileHash(media.uri);
+        if (mediaHash === newFileHash) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking media duplication:', error);
+      return false;
     }
   };
 
@@ -183,7 +237,7 @@ const locale = es;
       setNote(updatedNote);
     }
   };
-
+ 
   const handleCancelEdit = () => {
     // Reload original note data
     fetchNoteDetails();
@@ -204,15 +258,33 @@ const locale = es;
     });
 
     if (!result.canceled) {
-      const selectedImages = result.assets.map(asset => ({
-        uri: asset.uri,
-        addedAt: new Date(),
-        fileName: asset.fileName || asset.uri.split('/').pop(),
-        fileSize: asset.fileSize || 0,
-        type: 'image/jpeg',
-        isNew: true
-      }));
-      setNewImages(prev => [...prev, ...selectedImages]);
+      const validImages = [];
+      
+      for (const asset of result.assets) {
+        const isDuplicate = await isMediaAlreadyInNote(asset.uri, 'image');
+        
+        if (isDuplicate) {
+          ToastAndroid.showWithGravity(
+            'Esta imagen ya existe en la nota',
+            ToastAndroid.SHORT,
+            ToastAndroid.CENTER
+          );
+          continue;
+        }
+        
+        validImages.push({
+          uri: asset.uri,
+          addedAt: new Date(),
+          fileName: asset.fileName || asset.uri.split('/').pop(),
+          fileSize: asset.fileSize || 0,
+          type: 'image/jpeg',
+          isNew: true
+        });
+      }
+      
+      if (validImages.length > 0) {
+        setNewImages(prev => [...prev, ...validImages]);
+      }
     }
   };
 
@@ -224,23 +296,76 @@ const locale = es;
     });
 
     if (!result.canceled) {
-      const selectedVideos = result.assets.map(asset => ({
-        uri: asset.uri,
-        addedAt: new Date(),
-        fileName: asset.fileName || asset.uri.split('/').pop(),
-        fileSize: asset.fileSize || 0,
-        type: 'video/mp4',
-        isNew: true
-      }));
-      setNewVideos(prev => [...prev, ...selectedVideos]);
+      const validVideos = [];
+      
+      for (const asset of result.assets) {
+        const isDuplicate = await isMediaAlreadyInNote(asset.uri, 'video');
+        
+        if (isDuplicate) {
+          ToastAndroid.showWithGravity(
+            'Este video ya existe en la nota',
+            ToastAndroid.SHORT,
+            ToastAndroid.CENTER
+          );
+          continue;
+        }
+        
+        validVideos.push({
+          uri: asset.uri,
+          addedAt: new Date(),
+          fileName: asset.fileName || asset.uri.split('/').pop(),
+          fileSize: asset.fileSize || 0,
+          type: 'video/mp4',
+          isNew: true
+        });
+      }
+      
+      if (validVideos.length > 0) {
+        setNewVideos(prev => [...prev, ...validVideos]);
+      }
+    }
+  };
+
+  // Nuevo: Función para prevenir sincronización duplicada
+  const safeAddToSyncQueue = async (noteData, action) => {
+    const noteId = noteData.id || noteData.idCode;
+    
+    // Verificar si ya está en proceso de sincronización
+    if (syncInProgress.has(noteId)) {
+      console.log('Sync already in progress for note:', noteId);
+      return false;
+    }
+    
+    try {
+      syncInProgress.add(noteId);
+      setIsSyncing(true);
+      
+      await addToSyncQueue(noteData, action);
+      return true;
+    } catch (error) {
+      console.error('Error adding to sync queue:', error);
+      return false;
+    } finally {
+      syncInProgress.delete(noteId);
+      setIsSyncing(false);
     }
   };
 
   const handleSaveChanges = async () => {
     if (!note) return;
     
+    // Prevenir múltiples clics en el botón de guardar
+    if (isSyncing) {
+      ToastAndroid.showWithGravity(
+        'La sincronización ya está en progreso',
+        ToastAndroid.SHORT,
+        ToastAndroid.CENTER
+      );
+      return;
+    }
+    
     try {
-            // Verificar conexión a internet
+      // Verificar conexión a internet
       const networkState = await NetInfo.fetch();
       const hasInternet = networkState.isConnected;
 
@@ -293,7 +418,7 @@ const locale = es;
       
         if (response.status === 201 || response.status === 302) {
           console.log('Note updated successfully:', response.data);
-              // Refresh the note details
+          // Refresh the note details
           fetchNoteDetails();
           // Update local cache with the new data
           const cachedNotes = await loadNotesFromCache();
@@ -301,18 +426,15 @@ const locale = es;
             n.id === note.id ? { ...response.data, synced: 1 } : n
           );
           await saveNotesToCache(updatedNotes);
-            ToastAndroid.showWithGravity("Éxito. Nota actualizada correctamente",
-              ToastAndroid.SHORT,
-              ToastAndroid.CENTER,
-        )
-         
+          ToastAndroid.showWithGravity("Éxito. Nota actualizada correctamente",
+            ToastAndroid.SHORT,
+            ToastAndroid.CENTER,
+          )
           onNoteUpdated({ ...response.data, synced: 1 });
-          
-      
         }
       } else {
         // For unauthenticated user or local note - update locally
-       const updatedNote = {
+        const updatedNote = {
           ...note,
           title: editedTitle,
           details: editedDetails,
@@ -322,8 +444,8 @@ const locale = es;
           videos: [...(note.videos || []).filter((_, index) => 
             !deletedLocalMedia.some(d => d.mediaIndex === index && d.mediaType === 'video')
           ), ...newVideos],
-          synced: hasInternet && isAuthenticated ? 1 : 0, // Marcar como no sincronizado si no hay internet
-          pendingSync: true // Nueva bandera para indicar que necesita sincronización
+          synced: hasInternet && isAuthenticated ? 1 : 0,
+          pendingSync: true
         };
 
         // Update local cache
@@ -332,14 +454,10 @@ const locale = es;
           n.id === note.id ? updatedNote : n
         );
         await saveNotesToCache(updatedNotes);
-        if (isAuthenticated && !hasInternet) {
-          await addToSyncQueue(updatedNote, isLocalNote ? 'create' : 'update');
-        }
+        
         // If user is authenticated but note was local, add to sync queue
-        if (isAuthenticated && isLocalNote) {
-          await addToSyncQueue(updatedNote, 'create');
-        } else if (isAuthenticated) {
-          await addToSyncQueue(updatedNote, 'update');
+        if (isAuthenticated && !hasInternet) {
+          await safeAddToSyncQueue(updatedNote, isLocalNote ? 'create' : 'update');
         }
         
         Alert.alert(
@@ -365,10 +483,9 @@ const locale = es;
     } catch (error) {
       console.error('Error saving changes:', error);
       ToastAndroid.showWithGravity("Error. No se pudo guardar los cambios",
-              ToastAndroid.SHORT,
-              ToastAndroid.CENTER,
-        )
-      
+        ToastAndroid.SHORT,
+        ToastAndroid.CENTER,
+      )
     }
   };
 
@@ -385,7 +502,7 @@ const locale = es;
           style: "destructive",
           onPress: async () => {
             try {
-                     const networkState = await NetInfo.fetch();
+              const networkState = await NetInfo.fetch();
               const hasInternet = networkState.isConnected;
               if (hasInternet && isAuthenticated && !isLocalNote) {
                 // Delete from backend
@@ -396,10 +513,9 @@ const locale = es;
                 const updatedNotes = cachedNotes.filter(n => n.id !== note.id);
                 await saveNotesToCache(updatedNotes);
                 ToastAndroid.showWithGravity("Éxito. Nota eliminada correctamente",
-              ToastAndroid.SHORT,
-              ToastAndroid.CENTER,
-        )
-             
+                  ToastAndroid.SHORT,
+                  ToastAndroid.CENTER,
+                )
               } else {
                 // Delete locally and from sync queue if needed
                 const cachedNotes = await loadNotesFromCache();
@@ -408,7 +524,7 @@ const locale = es;
                 
                 // If note was synced, add to delete queue
                 if (note.synced === 1) {
-                  await addToSyncQueue(note, 'delete');
+                  await safeAddToSyncQueue(note, 'delete');
                 }
                 
                 Alert.alert(
@@ -425,11 +541,10 @@ const locale = es;
               
             } catch (error) {
               console.error('Error deleting note:', error);
-               ToastAndroid.showWithGravity("Error.No se pudo eliminar la nota",
-              ToastAndroid.SHORT,
-              ToastAndroid.CENTER,
-        )
-          
+              ToastAndroid.showWithGravity("Error.No se pudo eliminar la nota",
+                ToastAndroid.SHORT,
+                ToastAndroid.CENTER,
+              )
             }
           }
         }
@@ -465,7 +580,6 @@ const locale = es;
     }
   };
 
-  
   const renderMediaItem = (media, idx, type, isLocal = false) => {
     const isLocalMedia = isLocal || (media.uri && !media.uri.startsWith('http'));
     const sourceUri = isLocalMedia ? media.uri : 'https://backend-noteeasy-appcrud.onrender.com/' + (media.filePath || '');
@@ -502,9 +616,20 @@ const locale = es;
               onPress={() => openMediaViewer(media, type)}
               style={styles.mediaActionIcon}
             />
-          
-            
-              <Ionicons 
+          {isLocalMedia ? (
+               <Ionicons 
+                name="trash-outline" 
+                size={24} 
+                color="#f44336" 
+                onPress={() =>
+                  handleDeleteMedia( media.id, 
+                  isLocalMedia, 
+                  idx, 
+                  type)}
+                style={styles.mediaActionIcon}
+              />
+              ): (
+                  <Ionicons 
                 name="trash-outline" 
                 size={24} 
                 color="#f44336" 
@@ -516,7 +641,7 @@ const locale = es;
                 )}
                 style={styles.mediaActionIcon}
               />
-            
+              )}
           </>
         ) : (
           <>
@@ -543,21 +668,18 @@ const locale = es;
               onPress={() => openMediaViewer(media, type)}
               style={styles.mediaActionIcon}
             />
-           
-            
-              <Ionicons 
-                name="trash-outline" 
-                size={24} 
-                color="#f44336" 
-                onPress={() => deleteMediaFromBackend(
-                  media.id, 
-                  isLocalMedia, 
-                  idx, 
-                  type
-                )}
-                style={styles.mediaActionIcon}
-              />
-            
+            <Ionicons 
+              name="trash-outline" 
+              size={24} 
+              color="#f44336" 
+              onPress={() => deleteMediaFromBackend(
+                media.id, 
+                isLocalMedia, 
+                idx, 
+                type
+              )}
+              style={styles.mediaActionIcon}
+            />
           </>
         )}
       </Pressable>
@@ -593,9 +715,7 @@ const locale = es;
     );
   }
 
- 
   return (
-    console.log('Rendering note:', note),
     <>
       <BottomSheetModal
         ref={ref}
@@ -610,7 +730,7 @@ const locale = es;
               <Text style={styles.offlineText}>Sin conexión - Modo offline</Text>
             </View>
           )}
-          <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%' }}>
+          <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%',  paddingBottom: 20  }}>
             <View style={styles.detailContainer}>
               {/* Sync status indicator */}
               <View style={styles.syncStatusContainer}>
@@ -628,6 +748,12 @@ const locale = es;
                   <View style={[styles.statusBadge, styles.pendingBadge]}>
                     <Ionicons name="sync" size={16} color="#FF9800" />
                     <Text style={styles.statusText}>Pendiente</Text>
+                  </View>
+                )}
+                {isSyncing && (
+                  <View style={[styles.statusBadge, styles.syncingBadge]}>
+                    <ActivityIndicator size="small" color="white" />
+                    <Text style={styles.statusText}>Sincronizando...</Text>
                   </View>
                 )}
               </View>
@@ -762,10 +888,15 @@ const locale = es;
                 {isEditing ? (
                   <>
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.saveButton]}
+                      style={[styles.actionButton, styles.saveButton, isSyncing && styles.disabledButton]}
                       onPress={handleSaveChanges}
+                      disabled={isSyncing}
                     >
-                      <Text style={styles.actionButtonText}>Guardar</Text>
+                      {isSyncing ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <Text style={styles.actionButtonText}>Guardar</Text>
+                      )}
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.cancelButton]}
@@ -876,6 +1007,18 @@ const styles = StyleSheet.create({
     syncStatusContainer: {
     marginBottom: 15,
     alignItems: 'flex-start',
+  },
+  syncingBadge: {
+    backgroundColor: '#2196F3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   statusBadge: {
     flexDirection: 'row',

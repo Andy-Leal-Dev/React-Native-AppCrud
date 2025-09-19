@@ -6,7 +6,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Pressable
+  Pressable,
+  ToastAndroid
 
 } from "react-native";
 import Constants from 'expo-constants';
@@ -126,11 +127,10 @@ const syncPendingNotes = async () => {
   const networkState = await NetInfo.fetch();
   
   if (!networkState.isConnected) {
-    Alert.alert(
-      "Sin conexión",
-      "No hay conexión a internet. La sincronización se realizará cuando recuperes la conexión.",
-      [{ text: "Entendido" }]
-    );
+  
+    ToastAndroid('No hay conexión a internet. La sincronización se realizará cuando recuperes la conexión.',
+        ToastAndroid.SHORT,
+        ToastAndroid.CENTER)
     return { success: false, error: "No internet connection" };
   }
   

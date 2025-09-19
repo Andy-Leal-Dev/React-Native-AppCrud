@@ -26,3 +26,32 @@ export async function deleteFile(fileUri) {
     console.error('Error deleting file:', error);
   }
 }
+
+ export const calculateFileHash = async (fileUri) => {
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (!fileInfo.exists) {
+      throw new Error('File does not exist');
+    }
+    
+    // Leer el archivo como base64
+    const fileContent = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    
+    // Crear un hash simple (en producción, usa una librería como crypto-js)
+    let hash = 0;
+    for (let i = 0; i < fileContent.length; i++) {
+      const char = fileContent.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return hash.toString();
+  } catch (error) {
+    console.error('Error calculating file hash:', error);
+    // Fallback: usar timestamp + tamaño del archivo
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    return `${fileInfo.size}-${Date.now()}`;
+  }
+};

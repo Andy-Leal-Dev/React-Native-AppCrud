@@ -291,7 +291,7 @@ const syncPendingNotes = async () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <View style={styles.container}>
-           <ScrollView>
+           <ScrollView style={{flex:1}}>
             <View style={styles.header}>
               <View style={{flexDirection:'row', alignItems:'center',
               justifyContent:'space-between', gap:8}}>

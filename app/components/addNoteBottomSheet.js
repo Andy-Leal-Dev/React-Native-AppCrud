@@ -78,6 +78,7 @@ const AddNoteBottomSheet = React.forwardRef(({
             numberOfLines={10}
             value={newDetails}
             onChangeText={setNewDetails}
+            
           />
         </View>
         

@@ -35,6 +35,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyFileToNotesDir, calculateFileHash } from '../utils/fileUtils';
 const NOTES_DIR = FileSystem.documentDirectory + 'notes_media/';
 import NetInfo from '@react-native-community/netinfo';
+import { ScrollView } from 'react-native-gesture-handler';
+
 
 // Nuevo: Almacén para control de sincronización en curso
 const syncInProgress = new Set();
@@ -723,16 +725,16 @@ const NoteDetailBottomSheet = React.forwardRef(({
         snapPoints={snapPoints}
         enablePanDownToClose={enablePanDownToClose}
       >
-        <BottomSheetView style={styles.contentContainerNote}>
-           {!isConnected && (
+        {!isConnected && (
             <View style={styles.offlineIndicator}>
               <Ionicons name="cloud-offline" size={16} color="white" />
               <Text style={styles.offlineText}>Sin conexión - Modo offline</Text>
             </View>
           )}
           <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1, width:'100%',  paddingBottom: 20  }}>
-            <View style={styles.detailContainer}>
-              {/* Sync status indicator */}
+            <ScrollView style={{flex: 1}}>
+                  <View style={styles.detailContainer}>
+             
               <View style={styles.syncStatusContainer}>
                 {isLocalNote ? (
                   <View style={[styles.statusBadge, styles.localBadge]}>
@@ -936,8 +938,8 @@ const NoteDetailBottomSheet = React.forwardRef(({
                 </View>
               )}
             </View>
+            </ScrollView>
           </BottomSheetScrollView>
-        </BottomSheetView>
       </BottomSheetModal>
 
       <Modal
